@@ -173,7 +173,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       <button id="jump" class="pad" aria-label="Pular"><span class="ic">▲</span> <span class="lb">PULAR</span></button>
       <button id="pause" class="mini" aria-label="Pausar">❚❚</button>
       <button id="sound" class="secondary mini" aria-label="Som">🔊 SOM</button>
-      <a class="privlink" href="https://nerdgg094.github.io/nerdGG094/arcade/privacidade.html" target="_blank" rel="noopener">Política de privacidade</a>
+      <a class="privlink" href="https://jabdev-br.github.io/Refrigerantes-Jaboti/arcade/privacidade.html" target="_blank" rel="noopener">Política de privacidade</a>
     </div>
     <section class="scores" id="scoresBox" hidden aria-label="Ranking online">
       <h2>HIGH SCORES</h2>
@@ -738,14 +738,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       }
       return w;
     }
-    if (score > 250 && r < .07 && !bmxOn()) {
-      // drone com engradados voando em altura média: desliza por baixo ou pula por cima
-      obstacles.push({ kind: 'drone', x: x0, w: 54, bottom: GROUND - 96, ph: Math.random() * TAU });
-      w = 54;
-    } else if (score > 100 && r < .14 && !bmxOn()) {
-      // engradados pendurados por corda: só passa deslizando por baixo
-      obstacles.push({ kind: 'hang', x: x0, w: CRATE_W, bottom: GROUND - 100, rows: 2, sway: Math.random() * TAU });
-      w = CRATE_W;
+    if (score > 100 && r < .14 && !bmxOn()) {
+      if (biomeWeights().fabrica > .5) {
+        // dentro da fábrica: braço robótico segurando engradados (só passa deslizando por baixo)
+        obstacles.push({ kind: 'hang', x: x0, w: CRATE_W, bottom: GROUND - 100, rows: 2, sway: Math.random() * TAU });
+        w = CRATE_W;
+      } else {
+        // do lado de fora: drone com engradados voando em altura média (desliza por baixo ou pula por cima)
+        obstacles.push({ kind: 'drone', x: x0, w: 54, bottom: GROUND - 96, ph: Math.random() * TAU });
+        w = 54;
+      }
     } else if (r < .42 && r >= .28) {
       // cone ou palete vazio
       w = addProp(Math.random() < .5 ? 'cone' : 'palete', x0);
@@ -2363,6 +2365,22 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     g.addColorStop(0, c(0)); g.addColorStop(.35, c(k)); g.addColorStop(1, c(k * .3));   // surge aos poucos: sem borda no céu
     ctx.fillStyle = g; ctx.fillRect(0, top, W, bottom - top);
   }
+  // versão "de fundo" de uma imagem (feita uma vez): menos saturada e levemente desfocada, para não competir com os obstáculos
+  const mutedCache = new Map();
+  function bgSoft(im, f) {
+    if (!ok(im)) return im;
+    const id = im.src + '#mute' + f;
+    let c = mutedCache.get(id);
+    if (!c) {
+      c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const g = c.getContext('2d'); g.filter = f; g.drawImage(im, 0, 0);
+      if (!('filter' in g) || g.filter === 'none') return im;
+      Object.assign(c, { src: id, naturalWidth: c.width, naturalHeight: c.height, complete: true });
+      mutedCache.set(id, c);
+    }
+    return c;
+  }
+  const BG_MUTE = 'blur(1px) saturate(.68) brightness(1.04)', FAB_MUTE = 'blur(1.3px) saturate(.55) brightness(.9) contrast(.9)';
   function strip(im, factor, y, h, mirror = true, offset = 0) {
     const w = im.naturalWidth * h / im.naturalHeight, o = dist * factor + offset, src = N(im);
     for (let k = Math.floor(o / w); k * w - o < W; k++) {
@@ -2385,7 +2403,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function drawBillboardImg(im, x, i) {
     const s = .5, w = im.naturalWidth * s, h = im.naturalHeight * s, top = GROUND - 26 - h;
-    ctx.drawImage(N(im), x, top, w, h);
+    ctx.drawImage(N(bgSoft(im, 'saturate(.82)')), x, top, w, h);             // outdoor um pouco menos vivo (o logo continua legível)
     // área branca da placa na imagem: (23,32)–(281,152)
     const bx = x + 25 * s, by = top + 33 * s, bw = 255 * s, bh = 118 * s;
     // à noite entra aos poucos a versão com os refletores acesos (mesma placa, alinhada à de dia)
@@ -2471,7 +2489,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // trechos de cenário (Gemini): o fundo muda com a distância, com transição suave de 60 m.
   const BIOMES_ON = true;                                                    // religado a pedido do usuário (2026-11-09)
   const BIOMES = ['campo', 'canavial', 'cidade', 'fabrica'];
-  const BIOME_NAME = { canavial: '🌾 CANAVIAL', cidade: '🏙️ CIDADE', fabrica: '🏭 DENTRO DA FÁBRICA', campo: '🌳 CAMPO' };
+  const BIOME_NAME = { canavial: '🏛️ ATHENAS PAULISTA', cidade: '🏙️ CIDADE', fabrica: '🏭 DENTRO DA FÁBRICA', campo: '🌳 CAMPO' };
   const TRECHO = {};
   if (BIOMES_ON) ['canavial', 'cidade', 'fabrica'].forEach(n => { const i = new Image(); i.src = 'assets/cenario/trecho-' + n + '.webp'; TRECHO[n] = i; });
   const SEG = 400, FADE = 60;
@@ -2492,31 +2510,36 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.save(); ctx.globalAlpha = bw.campo;
     if (bw.campo > .01) {
     // morros gramados do interior de SP (desfocados e bem enevoados: são o mais distante)
-    strip(blurred(SCENE.morros, 1.6), .04, GROUND - 150, 115, false);
+    strip(ok(SCENE.morros) ? bgSoft(SCENE.morros, 'blur(1.6px) saturate(.68)') : SCENE.morros, .04, GROUND - 150, 115, false);
     haze(GROUND - 150, GROUND - 35, .32);
     // fábrica Jaboti ao longe
     const fab = sc('fabrica'), fo = dist * .1, tile = 1250;
     if (fab) for (let k = Math.floor(fo / tile) - 1; k <= Math.floor((fo + W) / tile) + 1; k++) {
       if (k !== 0 && hash(k * 3.3) < .3) continue;
       const fx = k * tile + 520 + (k === 0 ? 0 : hash(k * 9.1) * 400) - fo;
-      if (fx > -420 && fx < W + 40) drawFactoryImg(blurred(fab, .8), fx, GROUND - 64);
+      if (fx > -420 && fx < W + 40) drawFactoryImg(bgSoft(fab, 'blur(.9px) saturate(.72)'), fx, GROUND - 64);
     }
     haze(GROUND - 140, GROUND - 40, .14);
     // colinas com árvores
-    strip(SCENE.colinas, .2, GROUND - 108, 70);
-    haze(GROUND - 108, GROUND - 38, .06);
+    strip(ok(SCENE.colinas) ? bgSoft(SCENE.colinas, BG_MUTE) : SCENE.colinas, .2, GROUND - 108, 70);
+    haze(GROUND - 108, GROUND - 38, .16);                                    // mais névoa: o campo também fica atrás dos obstáculos
     }
     ctx.restore();
     // canavial e cidade: faixa atrás do alambrado (o céu do jogo continua aparecendo)
     ['canavial', 'cidade'].forEach(n => {
       if (bw[n] < .01 || !ok(TRECHO[n])) return;
-      ctx.save(); ctx.globalAlpha = bw[n]; strip(TRECHO[n], .2, GROUND - 196, 170, true); ctx.restore();
+      // cidade (feita a partir de foto da cidade real): mais alta — igreja e prédio aparecem no horizonte, casas do mesmo tamanho de antes
+      const im = bgSoft(TRECHO[n], BG_MUTE);
+      ctx.save(); ctx.globalAlpha = bw[n]; strip(im, .2, GROUND - 306, 280, false);   // as duas faixas novas (foto real) têm o mesmo formato
+      haze(GROUND - 200, GROUND - 20, .2);                                   // névoa: o fundo fica "mais longe"
+      ctx.restore();
     });
     // dentro da fábrica: cobre o fundo todo, do teto até a pista, com luz própria (escurece pouco à noite)
     if (bw.fabrica > .01 && ok(TRECHO.fabrica)) {
       ctx.save(); ctx.globalAlpha = bw.fabrica;
       ctx.fillStyle = '#26282d'; ctx.fillRect(0, 0, W, 8);                 // galpão ocupa a tela toda (teto em arco no alto)
-      nightFilter(.2); strip(TRECHO.fabrica, .2, 2, GROUND - 2, true); nightFilter(.55);
+      nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .2, 2, GROUND - 2, false); nightFilter(.55);
+      ctx.fillStyle = 'rgba(46,40,36,.16)'; ctx.fillRect(0, 0, W, GROUND);     // galpão um pouco mais escuro: obstáculos na frente se destacam
       ctx.restore();
     }
     
@@ -2555,6 +2578,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (sc('rua')) strip(SCENE.rua, 1, GROUND - 18, 92, false);   // guia com luzes + calçada
       else strip(chao, 1, GROUND - 24, 96);
       const fab = biomeWeights().fabrica;
+      const ave = biomeWeights().canavial;                                   // trecho Athenas Paulista: avenida asfaltada (Gemini 16A)
+      if (ave > .01 && ok(PISO_AV)) { ctx.save(); ctx.globalAlpha = ave; ctx.fillStyle = '#8d9196'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_AV, 1, GROUND - 24, 100, false); ctx.restore(); }
+      const cid = biomeWeights().cidade;                                     // cidade: calçada de pedra portuguesa (Gemini 15A)
+      if (cid > .01 && ok(PISO_CID)) { ctx.save(); ctx.globalAlpha = cid; ctx.fillStyle = '#b9b1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_CID, 1, GROUND - 24, 100, false); ctx.restore(); }
       if (fab > .01) { ctx.save(); ctx.globalAlpha = fab; if (ok(PISO_FAB)) { ctx.fillStyle = '#9aa1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_FAB, 1, GROUND - 24, 100, false); } else drawFactoryFloor(); ctx.restore(); }
             return;
     }
@@ -2619,6 +2646,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const FG_TOTAL = FG_CELLS.reduce((a, c) => a + c[5], 0);
   // dentro da fábrica: pilar, engradados, bombona, extintor, cone, fardo, paleteira, cavalete (Gemini 14B)
   const PISO_FAB = new Image(); PISO_FAB.src = 'assets/cenario/piso-fabrica.webp';
+  const PISO_CID = new Image(); PISO_CID.src = 'assets/cenario/piso-cidade.webp';
+  const PISO_AV = new Image(); PISO_AV.src = 'assets/cenario/piso-avenida.webp';
   const FG_FAB_IMG = new Image(); FG_FAB_IMG.src = 'assets/cenario/primeiro-plano-fabrica.webp';
   const FG_FAB_CELLS = [
     [0, 0, 53, 180, 330, 1],       // pilar amarelo
@@ -3756,7 +3785,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawScenery();
     drawGround();
     coins.forEach(drawCoin);
+    ctx.save(); ctx.shadowColor = 'rgba(20,10,0,.62)'; ctx.shadowBlur = 8;   // contorno escuro suave: obstáculos saltam do cenário
     obstacles.forEach(o => o.kind === 'can' ? drawCan(o) : o.kind === 'crate' ? drawCrates(o) : o.kind === 'bin' ? drawBinObs(o) : o.kind === 'hang' ? drawHang(o) : o.kind === 'drone' ? drawDrone(o) : o.kind === 'prop' ? drawProp(o) : o.kind === 'rail' ? drawRail(o) : o.kind === 'ramp' ? drawRamp(o) : o.kind === 'stairs' ? drawStairs(o) : drawBottle(o));
+    ctx.restore();
     items.forEach(drawItem);
     drawParticles();
     drawGas();
@@ -3802,7 +3833,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_SHEET), ...Object.values(ACC_SLIDE), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, PISO_FAB, FG_FAB_IMG, BMX_IMG]
+  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_SHEET), ...Object.values(ACC_SLIDE), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, BMX_IMG]
     .forEach(im => (im.decode ? im.decode() : Promise.resolve()).then(() => warmCtx.drawImage(im, 0, 0, 1, 1)).catch(() => {}));
   // prepara as versões coloridas do mascote aos poucos, uma por vez, para a primeira garrafa não travar o jogo
   const tintJobs = [];
