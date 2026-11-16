@@ -922,9 +922,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   ];
   // de BMX os pinos (pegs) dos eixos raspam no corrimão
   const GRINDS_BX = [
-    { label: 'DOUBLE PEG!', f: 0, dy: 29, color: '#ffd84a' },
-    { label: 'FEEBLE!', f: 1, dy: 29, tilt: -.14, color: '#7fd0ff' },
-    { label: 'ICEPICK!', f: 1, dy: 29, tilt: -.3, color: '#9bcb45' }
+    { label: 'DOUBLE PEG!', f: 0, dy: 23, color: '#ffd84a' },              // dy = altura dos pinos (raio da roda × BMX_S)
+    { label: 'FEEBLE!', f: 1, dy: 23, tilt: -.14, color: '#7fd0ff' },
+    { label: 'ICEPICK!', f: 1, dy: 23, tilt: -.3, color: '#9bcb45' }
   ];
   let lastGrind = null;
   const GRIND_TRUCK = 88;                                                    // distância do truck ao meio do skate (px do atlas)
@@ -1338,8 +1338,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // o patinete é desenhado pelo código em 3D (drawScooter). deck = [x, y do topo da base, ângulo] e bar = guidão (entre as mãos), na célula
   const SCOOT_IMG = new Image(); SCOOT_IMG.src = 'assets/mascote-patinete.webp';
   const SC = { size: 400, cx: 200, bot: 353, bar: [75, 93],
-    poses: [{ deck: [209, 322, 0], bar: [284, 229] }, { deck: [231, 322, 0], bar: [295, 208] }, { deck: null, bar: [306, 254] },
-      { deck: null, bar: [264, 229] }, { deck: [187, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
+    poses: [{ deck: [184, 322, 0], bar: [259, 236] }, { deck: [189, 322, 0], bar: [264, 228] },   // deck.x = guidão − 75: haste reta
+      { deck: null, bar: [273, 232] }, { deck: null, bar: [265, 232] }, { deck: [204, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
   const scooterOn = () => loja.loc === 'patinete' && ok(SCOOT_IMG);
   // BMX: só o mascote nas poses (Gemini 12-v3); a bicicleta é desenhada em 3D pelo código (drawBmx3D), sempre igual.
   // células de 400 px (fruta 112 px, centro em 200,150): 0 em pé nos pedais, 1 agachado, 2 bunny hop, 3 superman, 4 no-hander, 5 tailwhip.
@@ -1347,12 +1347,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // maos = ponto das mãos (guidão); solto = pés fora dos pedais (a bicicleta se prende pelas mãos)
   const BMX_IMG = new Image(); BMX_IMG.src = 'assets/mascote-bmx.webp';
   const BX = { size: 400, poses: [
-    { pes: [212, 259], ang: .876, dist: 47, maos: [294, 153] },
-    { pes: [217, 237], ang: 0, dist: 0, maos: [265, 175] },
-    { pes: [194, 260], ang: .087, dist: 23, maos: [286, 154] },
-    { pes: [120, 233], ang: -.852, dist: 32, maos: [284, 168], solto: true },
-    { pes: [223, 239], ang: 0, dist: 0, maos: null },
-    { pes: [215, 220], ang: .017, dist: 118, maos: [296, 157], solto: true }] };
+    { pes: [209, 255], ang: 0.585, dist: 30, maos: [275, 170] },
+    { pes: [212, 224], ang: 0.000, dist: 0, maos: [241, 169] },
+    { pes: [189, 241], ang: 0.000, dist: 0, maos: [263, 172] },
+    { pes: [106, 214], ang: -0.763, dist: 36, maos: [267, 176], solto: true },
+    { pes: [212, 221], ang: 0.000, dist: 0, maos: null },
+    { pes: [210, 197], ang: -0.078, dist: 120, maos: [272, 156], solto: true }] };
   const bmxOn = () => loja.loc === 'bmx' && ok(BMX_IMG);
   const wheels = () => skateOn() || scooterOn() || bmxOn();                 // sobre rodas: obstáculos, grind, rampas…
 
@@ -1693,6 +1693,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // medidas em px da célula de 400 (×k na tela); origem no chão embaixo do meio da bicicleta; x para frente, y para cima,
   // z para perto da câmera. o: { bar: [x, y] guidão (entre as mãos), crank: ângulo do pedivela, spin: giro das rodas,
   //   whip: giro do quadro em volta do guidão (tailwhip) }
+  const BMX_S = .8;                                                         // tamanho da BMX em relação à geometria BM
+  const BMX_RODA = new Image(); BMX_RODA.src = 'assets/bmx-roda.webp';   // roda recortada da BMX renderizada (ferramentas/roda-bmx-3d.py)
   const BM = { R: 46, rear: -86, front: 86, bb: [-14, 44], seat: [-44, 116], head0: [58, 92], head1: [64, 118], crankL: 22, pitch: .3,
     bar: [44, 150], frame: '#d7262b', frameDark: '#7a0f13', rim: '#f2c41f' };
   function drawBmx3D(k, o = {}) {
@@ -1702,25 +1704,39 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       return [x * k, -(y * cp - z * sp) * k, y * sp + z * cp];
     };
     const line = (a, b, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w * k; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
-    const tube = (a, b, w = 7) => { line(a, b, BM.frameDark, w + 2.5); line(a, b, BM.frame, w); line([a[0], a[1] - w * .25 * k], [b[0], b[1] - w * .25 * k], 'rgba(255,255,255,.35)', w * .25); };
+    const off = (a, d) => [a[0], a[1] + d * k];
+    // tubo pintado com volume: contorno escuro, sombra embaixo, vermelho, reflexo em cima (luz de cima à esquerda)
+    const tube = (a, b, w = 7) => { line(a, b, BM.frameDark, w + 2.5); line(a, b, '#a8141b', w); line(off(a, -w * .12), off(b, -w * .12), BM.frame, w * .72); line(off(a, -w * .3), off(b, -w * .3), '#ff6f5f', w * .22); line(off(a, -w * .33), off(b, -w * .33), 'rgba(255,255,255,.7)', w * .08); };
+    // peça cromada: contorno, cinza, faixa clara e reflexo branco
+    const chrome = (a, b, w) => { line(a, b, '#4a525a', w + 1.5); line(a, b, '#9aa3ab', w); line(off(a, -w * .15), off(b, -w * .15), '#e3e8ec', w * .55); line(off(a, -w * .28), off(b, -w * .28), '#ffffff', w * .18); };
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const spin = o.spin || 0, R = BM.R;
     const wheel = (x, rot) => {
       const [cx, cy] = P(x, R, 0, rot), sq = rot ? Math.max(.2, Math.abs(cw)) : 1, r = R * k;
       ctx.save(); ctx.translate(cx, cy); ctx.scale(sq, 1);
-      ctx.beginPath(); ctx.arc(0, 0, r - 5 * k, 0, TAU); ctx.strokeStyle = '#18181b'; ctx.lineWidth = 10 * k; ctx.stroke();               // pneu (vazado)
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2 * k; for (let i = 0; i < 18; i++) { const a = i / 18 * TAU + spin; ctx.beginPath(); ctx.arc(0, 0, r - 2.5 * k, a, a + .12); ctx.stroke(); }   // cravos do pneu
-      ctx.beginPath(); ctx.arc(0, 0, r - 11 * k, 0, TAU); ctx.strokeStyle = BM.rim; ctx.lineWidth = 4.5 * k; ctx.stroke();                 // aro amarelo
-      ctx.beginPath(); ctx.arc(0, 0, r - 13.5 * k, 0, TAU); ctx.strokeStyle = 'rgba(120,80,0,.6)'; ctx.lineWidth = 1 * k; ctx.stroke();
-      ctx.strokeStyle = 'rgba(210,216,222,.85)'; ctx.lineWidth = 1 * k;                                                                    // raios girando
-      for (let i = 0; i < 12; i++) { const a = i / 12 * TAU + spin; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4 * k, Math.sin(a) * 4 * k); ctx.lineTo(Math.cos(a + .5) * (r - 12 * k), Math.sin(a + .5) * (r - 12 * k)); ctx.stroke(); }
-      ctx.beginPath(); ctx.arc(0, 0, 5 * k, 0, TAU); ctx.fillStyle = '#b9c0c6'; ctx.fill();
+      if (ok(BMX_RODA)) {                                                    // roda renderizada (pneu com cravos + aro), girando
+        ctx.strokeStyle = 'rgba(205,212,220,.9)'; ctx.lineWidth = .9 * k;                                                                  // raios cruzados
+        for (let i = 0; i < 24; i++) { const a = i / 24 * TAU + spin, d = i % 2 ? .38 : -.38; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4.5 * k, Math.sin(a) * 4.5 * k); ctx.lineTo(Math.cos(a + d) * r * .71, Math.sin(a + d) * r * .71); ctx.stroke(); }
+        ctx.save(); ctx.rotate(spin); ctx.drawImage(BMX_RODA, -r, -r, 2 * r, 2 * r); ctx.restore();
+        const g = ctx.createRadialGradient(-r * .4, -r * .5, r * .15, 0, 0, r);                                                             // luz fixa de cima à esquerda
+        g.addColorStop(0, 'rgba(255,255,255,.22)'); g.addColorStop(.55, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)');
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.arc(0, 0, r * .7, 0, TAU, true); ctx.fillStyle = g; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(0, 0, r - 5 * k, 0, TAU); ctx.strokeStyle = '#18181b'; ctx.lineWidth = 10 * k; ctx.stroke();               // pneu (vazado)
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2 * k; for (let i = 0; i < 18; i++) { const a = i / 18 * TAU + spin; ctx.beginPath(); ctx.arc(0, 0, r - 2.5 * k, a, a + .12); ctx.stroke(); }   // cravos do pneu
+        ctx.beginPath(); ctx.arc(0, 0, r - 11 * k, 0, TAU); ctx.strokeStyle = BM.rim; ctx.lineWidth = 4.5 * k; ctx.stroke();                 // aro amarelo
+        ctx.beginPath(); ctx.arc(0, 0, r - 13.5 * k, 0, TAU); ctx.strokeStyle = 'rgba(120,80,0,.6)'; ctx.lineWidth = 1 * k; ctx.stroke();
+        ctx.strokeStyle = 'rgba(210,216,222,.85)'; ctx.lineWidth = 1 * k;                                                                    // raios girando
+        for (let i = 0; i < 12; i++) { const a = i / 12 * TAU + spin; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4 * k, Math.sin(a) * 4 * k); ctx.lineTo(Math.cos(a + .5) * (r - 12 * k), Math.sin(a + .5) * (r - 12 * k)); ctx.stroke(); }
+      }
+      const hg = ctx.createRadialGradient(-1.5 * k, -1.5 * k, .5 * k, 0, 0, 6 * k); hg.addColorStop(0, '#ffffff'); hg.addColorStop(.5, '#b9c0c6'); hg.addColorStop(1, '#5e6870');   // cubo cromado
+      ctx.beginPath(); ctx.arc(0, 0, 6 * k, 0, TAU); ctx.fillStyle = hg; ctx.fill();
       ctx.restore();
-      line(P(x, R, -8, rot), P(x, R, 12, rot), '#5e6870', 7); line(P(x, R, -8, rot), P(x, R, 12, rot), '#d9dfe4', 4.5);   // pino (peg)
+      chrome(P(x, R, -8, rot), P(x, R, 12, rot), 5.5);   // pino (peg)
     };
     const ca = o.crank || 0, crank = s => [BM.bb[0] + Math.cos(ca + s) * BM.crankL, BM.bb[1] - Math.sin(ca + s) * BM.crankL];
-    const pedal = (q, z) => { const [x, y] = P(q[0], q[1], z, true); ctx.fillStyle = '#222'; ctx.fillRect(x - 7 * k, y - 2.5 * k, 14 * k, 5 * k); };
+    const pedal = (q, z) => { const [x, y] = P(q[0], q[1], z, true); ctx.fillStyle = '#111'; ctx.fillRect(x - 7.5 * k, y - 3 * k, 15 * k, 6 * k); ctx.fillStyle = '#2c2c30'; ctx.fillRect(x - 6.5 * k, y - 2.2 * k, 13 * k, 3 * k); ctx.fillStyle = '#e8a33a'; ctx.fillRect(x - 6.5 * k, y + .8 * k, 3 * k, 1.6 * k); ctx.fillRect(x + 3.5 * k, y + .8 * k, 3 * k, 1.6 * k); };   // pedal com refletores
     // lado de longe: pedivela e pedal de trás
     const qf = crank(Math.PI); line(P(BM.bb[0], BM.bb[1], -6, true), P(qf[0], qf[1], -6, true), '#8d969e', 4); pedal(qf, -10);
     wheel(BM.rear, true); wheel(BM.front, false);
@@ -1728,22 +1744,25 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const Q = (pt, z = 0) => P(pt[0], pt[1], z, true);
     const bb = Q(BM.bb), seat = Q(BM.seat), sc = Q([BM.seat[0] + 8, BM.seat[1] - 14]), h0 = Q(BM.head0), h1 = Q(BM.head1), ra = Q([BM.rear, R]);
     tube(ra, bb, 6); tube(ra, sc, 5.5); tube(bb, sc, 7); tube(sc, h1, 7.5); tube(bb, h0, 8.5);
-    line(P(hx + 2, BM.head1[1] + 4), P(BM.front, R), '#5e6870', 7.5); line(P(hx + 2, BM.head1[1] + 4), P(BM.front, R), '#d9dfe4', 5);   // garfo
+    chrome(P(hx + 2, BM.head1[1] + 4), P(BM.front, R), 5.5);   // garfo
     tube(h0, h1, 9);                                                                                                         // caixa de direção
     // coroa, corrente e banco
-    ctx.beginPath(); ctx.arc(bb[0], bb[1], 11 * k, 0, TAU); ctx.fillStyle = '#c9d0d6'; ctx.fill(); ctx.strokeStyle = '#5e6870'; ctx.lineWidth = 1.5 * k; ctx.stroke();
+    { const cg = ctx.createRadialGradient(bb[0] - 3 * k, bb[1] - 4 * k, k, bb[0], bb[1], 12 * k); cg.addColorStop(0, '#ffffff'); cg.addColorStop(.45, '#c9d0d6'); cg.addColorStop(1, '#6b737b');   // coroa cromada dentada
+      ctx.beginPath(); for (let i = 0; i < 28; i++) { const a = i / 28 * TAU + (o.crank || 0), rr = (i % 2 ? 12 : 10.6) * k; ctx.lineTo(bb[0] + Math.cos(a) * rr, bb[1] + Math.sin(a) * rr); } ctx.closePath();
+      ctx.fillStyle = cg; ctx.fill(); ctx.strokeStyle = '#4a525a'; ctx.lineWidth = 1.2 * k; ctx.stroke(); }
     ctx.beginPath(); ctx.arc(bb[0], bb[1], 4 * k, 0, TAU); ctx.fillStyle = '#5e6870'; ctx.fill();
     line([bb[0], bb[1] - 11 * k], [ra[0], ra[1] - 5 * k], 'rgba(70,76,82,.9)', 1.6); line([bb[0], bb[1] + 11 * k], [ra[0], ra[1] + 5 * k], 'rgba(70,76,82,.9)', 1.6);
-    line(sc, seat, '#8d969e', 4.5);
-    ctx.save(); ctx.translate(seat[0], seat[1]); ctx.rotate(-.12); ctx.beginPath(); ctx.ellipse(0, -2 * k, 17 * k, 5.5 * k, 0, 0, TAU); ctx.fillStyle = '#1e1e22'; ctx.fill(); ctx.restore();
+    chrome(sc, seat, 3.8);
+    ctx.save(); ctx.translate(seat[0], seat[1]); ctx.rotate(-.12); ctx.beginPath(); ctx.ellipse(0, -2 * k, 17 * k, 5.5 * k, 0, 0, TAU); ctx.fillStyle = '#1e1e22'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1 * k; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-3 * k, -4.5 * k, 10 * k, 1.6 * k, 0, 0, TAU); ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fill(); ctx.restore();   // banco com brilho
     // guidão (riser) até o ponto das mãos
     const bar = o.bar || BM.bar, top = P(BM.head1[0] + 2, BM.head1[1] + 8), bp = P(bar[0], bar[1]);
-    line(P(BM.head1[0], BM.head1[1]), top, '#5e6870', 7); line(P(BM.head1[0], BM.head1[1]), top, '#d9dfe4', 4.5);           // mesa
-    line(top, bp, '#5e6870', 6); line(top, bp, '#d9dfe4', 3.8);                                                              // guidão subindo
-    line([bp[0] - 12 * k, bp[1]], [bp[0] + 14 * k, bp[1]], '#5e6870', 6); line([bp[0] - 12 * k, bp[1]], [bp[0] + 14 * k, bp[1]], '#d9dfe4', 3.8);
-    line([bp[0] + 4 * k, bp[1]], [bp[0] + 16 * k, bp[1]], '#141416', 7.5);                                                   // manopla
+    chrome(P(BM.head1[0], BM.head1[1]), top, 5.5);           // mesa
+    chrome(top, bp, 4.2);                                                              // guidão subindo
+    chrome([bp[0] - 12 * k, bp[1]], [bp[0] + 14 * k, bp[1]], 4.2);
+    line([bp[0] + 4 * k, bp[1]], [bp[0] + 16 * k, bp[1]], '#000', 8.5); line([bp[0] + 4 * k, bp[1]], [bp[0] + 16 * k, bp[1]], '#1c1c20', 7); line([bp[0] + 5 * k, bp[1] - 2 * k], [bp[0] + 15 * k, bp[1] - 2 * k], 'rgba(255,255,255,.3)', 1.4);   // manopla com brilho
     // lado de perto: pedivela e pedal da frente
-    const qn = crank(0); line(P(BM.bb[0], BM.bb[1], 8, true), P(qn[0], qn[1], 8, true), '#c9d0d6', 4.5); pedal(qn, 12);
+    const qn = crank(0); chrome(P(BM.bb[0], BM.bb[1], 8, true), P(qn[0], qn[1], 8, true), 4); pedal(qn, 12);
     ctx.lineCap = 'butt';
   }
   // ---------------- BMX: mascote + bicicleta 3D ----------------
@@ -1756,19 +1775,19 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // desenha a BMX e o mascote com a origem no chão, embaixo do meio da bicicleta
   function drawBmxPose(f, k, tintKey, o = {}) {
-    const P0 = BX.poses[f] || BX.poses[0], z = k;
+    const P0 = BX.poses[f] || BX.poses[0], z = k, kb = k * BMX_S;           // a bicicleta é desenhada a BMX_S do tamanho (mascote 3D é mais baixinho)
     let bb = BM.bb, bar, X0, Y0;
     if (P0.solto) {                                                          // pés fora: a bicicleta fica presa nas mãos
-      bar = BM.bar; X0 = bar[0] * z - P0.maos[0] * z; Y0 = -bar[1] * z - P0.maos[1] * z;
+      bar = BM.bar; X0 = bar[0] * kb - P0.maos[0] * z; Y0 = -bar[1] * kb - P0.maos[1] * z;
     } else {
-      X0 = bb[0] * z - P0.pes[0] * z; Y0 = -bb[1] * z - P0.pes[1] * z;     // pés no eixo do pedivela
-      bar = P0.maos ? [bb[0] + P0.maos[0] - P0.pes[0], bb[1] + P0.pes[1] - P0.maos[1]] : BM.bar;
+      X0 = bb[0] * kb - P0.pes[0] * z; Y0 = -bb[1] * kb - P0.pes[1] * z;   // pés no eixo do pedivela
+      bar = P0.maos ? [bb[0] + (P0.maos[0] - P0.pes[0]) / BMX_S, bb[1] + (P0.pes[1] - P0.maos[1]) / BMX_S] : BM.bar;
     }
-    const half = P0.solto || !P0.dist ? BM.crankL : clamp(P0.dist / 2, 14, 28);
+    const half = P0.solto || !P0.dist ? BM.crankL : clamp(P0.dist / 2 / BMX_S, 14, 28);
     const crank = P0.solto ? (o.crank || 0) : -P0.ang;
     const keep = BM.crankL; BM.crankL = half;
     const f0 = ctx.filter; if (f0 && f0 !== 'none') ctx.filter = 'none';      // arco-íris não pinta a bicicleta
-    drawBmx3D(k, { bar, crank, spin: o.spin || 0, whip: o.whip || 0 });
+    drawBmx3D(kb, { bar, crank, spin: o.spin || 0, whip: o.whip || 0 });
     ctx.filter = f0 || 'none';
     BM.crankL = keep;
     if (ok(BMX_IMG)) ctx.drawImage(tinted(BMX_IMG, tintKey), f * BX.size, 0, BX.size, BX.size, X0, Y0, BX.size * z, BX.size * z);
@@ -1779,14 +1798,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const e = .5 - .5 * Math.cos(Math.PI * clamp(player.spin, 0, 1));
     const flip = T && T.flip ? -e * T.flip * TAU : 0;                        // backflip: tudo gira para trás
     const whip = T && T.whip ? e * T.whip * TAU : 0;                         // tailwhip: o quadro gira em volta do guidão
-    const spin = (dist || t * 300) / (BM.R * k);
+    const spin = (dist || t * 300) / (BM.R * k * BMX_S);
     const bob = player.ground && state === 'running' ? Math.abs(Math.sin(t * 16)) * 1.2 : 0;
     const bx0 = 18 * k;                                                      // meio da bicicleta um pouco à frente do mascote
     const draw = (x, y, r, a) => {
       ctx.save(); ctx.globalAlpha *= a; ctx.translate(x + bx0, y - bob);
       if (player.grind && state === 'running') {                             // grind nos pinos: inclina na descida e no pino de trás
         const g = player.grind.g; ctx.rotate(player.grind.slope);
-        if (g.tilt) { const tx = BM.rear * k, ty = -BM.R * k; ctx.translate(tx, ty); ctx.rotate(g.tilt); ctx.translate(-tx, -ty); }
+        if (g.tilt) { const tx = BM.rear * k * BMX_S, ty = -BM.R * k * BMX_S; ctx.translate(tx, ty); ctx.rotate(g.tilt); ctx.translate(-tx, -ty); }
       } else if (player.ground && player.slope && state === 'running') ctx.rotate(-player.slope);
       if (r) { const cy = -80 * k; ctx.translate(0, cy); ctx.rotate(r); ctx.translate(0, -cy); }
       drawBmxPose(f, k, tint, { spin, whip });
@@ -1816,9 +1835,13 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const poly = (pts, fill, stroke) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.3 * k; ctx.stroke(); } };
     const wheel = (x, rot) => {
       const [wx, wy] = P(x, SCG.ay, 0, rot), sq = rot ? Math.max(.22, Math.abs(cyw)) : 1, r = SCG.r * k;
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * sq, r, 0, 0, TAU); ctx.fillStyle = '#1b1b1e'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * .6 * sq, r * .6, 0, 0, TAU); ctx.fillStyle = '#f2c41f'; ctx.fill(); ctx.strokeStyle = '#9a7400'; ctx.lineWidth = 1.2 * k; ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * .22 * sq, r * .22, 0, 0, TAU); ctx.fillStyle = '#b9c0c6'; ctx.fill();
+      const tg = ctx.createRadialGradient(wx - r * .35 * sq, wy - r * .4, r * .1, wx, wy, r);                                  // pneu de borracha com volume
+      tg.addColorStop(0, '#4a4a50'); tg.addColorStop(.6, '#1b1b1e'); tg.addColorStop(1, '#050506');
+      ctx.beginPath(); ctx.ellipse(wx, wy, r * sq, r, 0, 0, TAU); ctx.fillStyle = tg; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
+      const rg = ctx.createRadialGradient(wx - r * .2 * sq, wy - r * .25, r * .05, wx, wy, r * .6);                             // miolo amarelo brilhante
+      rg.addColorStop(0, '#fff2a8'); rg.addColorStop(.45, '#f2c41f'); rg.addColorStop(1, '#a87d00');
+      ctx.beginPath(); ctx.ellipse(wx, wy, r * .6 * sq, r * .6, 0, 0, TAU); ctx.fillStyle = rg; ctx.fill(); ctx.strokeStyle = '#7a5a00'; ctx.lineWidth = 1.2 * k; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(wx, wy, r * .22 * sq, r * .22, 0, 0, TAU); ctx.fillStyle = '#d9dfe4'; ctx.fill(); ctx.strokeStyle = '#5e6870'; ctx.lineWidth = .8 * k; ctx.stroke();
     };
     // barra do guidão no espaço local (o ponto da célula vira x/y do patinete)
     let bl;
@@ -1846,12 +1869,13 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     line([P(SCG.half - 6, -3, 0, true), P(SCG.hx, SCG.hy, 0, true)], '#5a0c10', 11); line([P(SCG.half - 6, -3, 0, true), P(SCG.hx, SCG.hy, 0, true)], '#e0373c', 8);   // pescoço vermelho
     const fend = []; for (let i = 0; i <= 8; i++) { const a = .35 + i / 8 * 2.3; fend.push(P(SCG.rear + Math.cos(a) * 25, SCG.ay + Math.sin(a) * 25, 0, true)); }
     line(fend, '#5a0c10', 7); line(fend, '#e0373c', 4.5);                     // para-lama de trás
-    line([head, hb], '#5e6870', 8); line([head, hb], '#d9dfe4', 5); line([head, hb], 'rgba(255,255,255,.7)', 1.5);   // haste
+    const sx = p => [p[0] - 1.6 * k, p[1]], sx2 = p => [p[0] - 2.4 * k, p[1]];
+    line([head, hb], '#4a525a', 8.5); line([head, hb], '#9aa3ab', 6.5); line([sx(head), sx(hb)], '#e3e8ec', 3.4); line([sx2(head), sx2(hb)], '#ffffff', 1.2);   // haste cromada
     poly([[-5, 4], [5, 4], [5, -4], [-5, -4]].map(([x, y]) => [head[0] + x * k, head[1] + y * k]), '#c9d0d6', '#4e565e');   // abraçadeira
     const g0 = [hb[0] - 21 * k, hb[1]], g1 = [hb[0] + 21 * k, hb[1]];        // guidão em T (manoplas vermelhas)
-    line([g0, g1], '#5e6870', 7); line([g0, g1], '#d9dfe4', 4.5);
-    line([[g0[0], g0[1]], [g0[0] + 9 * k, g0[1]]], '#7a0f13', 9); line([[g0[0], g0[1]], [g0[0] + 9 * k, g0[1]]], '#e0373c', 6.5);
-    line([[g1[0], g1[1]], [g1[0] - 9 * k, g1[1]]], '#7a0f13', 9); line([[g1[0], g1[1]], [g1[0] - 9 * k, g1[1]]], '#e0373c', 6.5);
+    const up = p => [p[0], p[1] - 1.4 * k];
+    line([g0, g1], '#4a525a', 7.5); line([g0, g1], '#9aa3ab', 5.5); line([up(g0), up(g1)], '#ffffff', 1.4);
+    [[g0, 9], [g1, -9]].forEach(([g, d]) => { const e = [g[0] + d * k, g[1]]; line([g, e], '#7a0f13', 9); line([g, e], '#d7262b', 6.5); line([up(g), up(e)], 'rgba(255,190,180,.8)', 1.6); });   // manoplas com brilho
     ctx.lineCap = 'butt';
   }
   // pose f do atlas do patinete com o patinete embaixo (origem do contexto = chão, sob o meio da célula)
@@ -1906,7 +1930,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function drawBoardFly() {
     const b = boardFly, k = SP.scale, B = SK.shape;
-    if (b.bmx) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.translate(0, 60 * k); drawBmx3D(k, { spin: b.r * 2 }); ctx.restore(); return; }
+    if (b.bmx) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.translate(0, 60 * k * BMX_S); drawBmx3D(k * BMX_S, { spin: b.r * 2 }); ctx.restore(); return; }
     if (b.scooter) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); drawScooter(k, [SC.cx, SC.bot - 31, 0], null, 0, -10); ctx.restore(); return; }
     if (!ok(SKATE_SHAPE)) return;
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.drawImage(shapeImg(), -B.w / 2 * k, -B.h / 2 * k, B.w * k, B.h * k); ctx.restore();
@@ -3835,7 +3859,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_SHEET), ...Object.values(ACC_SLIDE), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, BMX_IMG]
+  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_SHEET), ...Object.values(ACC_SLIDE), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, BMX_IMG, BMX_RODA]
     .forEach(im => (im.decode ? im.decode() : Promise.resolve()).then(() => warmCtx.drawImage(im, 0, 0, 1, 1)).catch(() => {}));
   // prepara as versões coloridas do mascote aos poucos, uma por vez, para a primeira garrafa não travar o jogo
   const tintJobs = [];
