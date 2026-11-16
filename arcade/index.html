@@ -691,17 +691,19 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const flavorByName = n => FLAVORS.find(f => f.name === n);
   const mult = () => skills.dobro > 0 ? 2 : 1;
 
-  const CRATE_W = 64, CRATE_H = CRATE_W * 90 / 129;
+  // tamanho padrão dos obstáculos do chão (2026-11-16): tudo ~40% maior que antes, desenho e colisão juntos
+  const CRATE_W = 88, CRATE_H = CRATE_W * 171 / 205, HANG_W = 64;   // engradado 3D (imagem justa 205×171); o do braço continua 64
   // peças da fábrica: largura na tela e áreas de colisão [x, largura, altura] a partir do chão
   const PROPS = {
-    palete:    { w: 92, hit: [[6, 80, 28]] },
-    cone:      { w: 36, hit: [[8, 20, 40]] },
-    paleteira: { w: 96, hit: [[2, 88, 20], [64, 22, 62]] },
-    fardos:    { w: 78, hit: [[4, 70, 84]] }
+    palete:    { w: 129, hit: [[8, 112, 39]] },
+    cone:      { w: 50, hit: [[11, 28, 56]] },
+    paleteira: { w: 134, hit: [[3, 123, 28], [90, 31, 87]] },
+    fardos:    { w: 109, hit: [[6, 98, 118]] },
+    fardosR:   { w: 78, hit: [[4, 70, 84]], img: 'fardos' }      // fardos depois da rampa do skate: tamanho antigo para o salto alcançar
   };
   function addProp(name, x0) {
     const P = PROPS[name];
-    obstacles.push({ kind: 'prop', name, x: x0, w: P.w, h: Math.max(...P.hit.map(r => r[2])), hit: P.hit });
+    obstacles.push({ kind: 'prop', name, img: P.img || name, x: x0, w: P.w, h: Math.max(...P.hit.map(r => r[2])), hit: P.hit });
     return P.w;
   }
   function spawn() {
@@ -722,7 +724,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         // rampa: sobe nela andando e sai voando bem alto por cima dos paletes de garrafas
         const rw = 170, n = speed > 620 ? 3 : 2;
         obstacles.push({ kind: 'ramp', x: x0, w: rw, h: 58 });
-        for (let i = 0; i < n; i++) addProp('fardos', x0 + rw + 55 + i * 80);
+        for (let i = 0; i < n; i++) addProp('fardosR', x0 + rw + 55 + i * 80);
         w = rw + 55 + n * 80;
         coinArc(x0 + rw + 55 + n * 40, 6, 120 + n * 60, 150, 140);
       } else {
@@ -741,8 +743,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (score > 100 && r < .14 && !bmxOn()) {
       if (biomeWeights().fabrica > .5) {
         // dentro da fábrica: braço robótico segurando engradados (só passa deslizando por baixo)
-        obstacles.push({ kind: 'hang', x: x0, w: CRATE_W, bottom: GROUND - 100, rows: 2, sway: Math.random() * TAU });
-        w = CRATE_W;
+        obstacles.push({ kind: 'hang', x: x0, w: HANG_W, bottom: GROUND - 100, rows: 2, sway: Math.random() * TAU });
+        w = HANG_W;
       } else {
         // do lado de fora: drone com engradados voando em altura média (desliza por baixo ou pula por cima)
         obstacles.push({ kind: 'drone', x: x0, w: 54, bottom: GROUND - 96, ph: Math.random() * TAU });
@@ -761,10 +763,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (Math.random() < .55) coinArc(x0 + w / 2, 5, 70 + w, 150, 70);
     } else if (r < .28) {
       // lixeira da coleta seletiva
-      const img = pick(BIN_IMGS), h = 46;
-      obstacles.push({ kind: 'bin', x: x0, w: 50, h, img });
-      w = 50;
-      if (Math.random() < .45) coinArc(x0 + 25, 4, 70, 100, 60);
+      const img = pick(BIN_IMGS), h = 64;
+      obstacles.push({ kind: 'bin', x: x0, w: 56, h, img });
+      w = 56;
+      if (Math.random() < .45) coinArc(x0 + 28, 4, 70, 100, 60);
     } else {
       // engradados: sozinho, lado a lado ou empilhados
       let cols = 1, rows = 1;
@@ -2404,18 +2406,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   function drawBillboardImg(im, x, i) {
     const s = .5, w = im.naturalWidth * s, h = im.naturalHeight * s, top = GROUND - 26 - h;
     ctx.drawImage(N(bgSoft(im, 'saturate(.82)')), x, top, w, h);             // outdoor um pouco menos vivo (o logo continua legível)
-    // área branca da placa na imagem: (23,32)–(281,152)
-    const bx = x + 25 * s, by = top + 33 * s, bw = 255 * s, bh = 118 * s;
+    // área branca da placa na imagem 3D (290×242): (15,45)–(274,176)
+    const bx = x + 16 * s, by = top + 46 * s, bw = 257 * s, bh = 129 * s;
     // à noite entra aos poucos a versão com os refletores acesos (mesma placa, alinhada à de dia)
     const night = dark > .02 && ok(OUTDOOR_NIGHT);
-    if (night) { ctx.globalAlpha = dark; ctx.drawImage(OUTDOOR_NIGHT, x + 5 * s, top - 2 * s, 290 * s, 247 * s); ctx.globalAlpha = 1; }
+    if (night) { ctx.globalAlpha = dark; ctx.drawImage(OUTDOOR_NIGHT, x, top, w, h); ctx.globalAlpha = 1; }   // mesmo tamanho e enquadramento da de dia
     const c = boardCanvas(i);
     if (c) ctx.drawImage(c, bx, by, bw, bh);
     if (dark > .05) { ctx.fillStyle = `rgba(19,28,58,${dark * (night ? .2 : .45)})`; ctx.fillRect(bx, by, bw, bh); }
     if (night) {                                    // cones de luz dos refletores por cima do logo
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      [62, 228].forEach(lx => {
-        const X = x + (lx + 5) * s, Y = top + 12 * s, B = by + bh;
+      [67, 224].forEach(lx => {                    // refletores da arte 3D
+        const X = x + lx * s, Y = top + 31 * s, B = by + bh;
         const g = ctx.createLinearGradient(0, Y, 0, B); g.addColorStop(0, `rgba(255,236,170,${.42 * dark})`); g.addColorStop(1, 'rgba(255,236,170,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(X - 5, Y); ctx.lineTo(X + 5, Y); ctx.lineTo(X + 34, B); ctx.lineTo(X - 34, B); ctx.closePath(); ctx.fill();
       });
@@ -2634,14 +2636,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // FG_CELLS: [x na tira, y, largura, altura, altura na tela, peso no sorteio]
   const FG_IMG = new Image(); FG_IMG.src = 'assets/cenario/primeiro-plano.webp';
   const FG_CELLS = [
-    [0, 0, 68, 180, 360, 1],      // poste
-    [72, 48, 156, 132, 120, 3],   // moita
-    [232, 27, 124, 153, 125, 4],  // capim
-    [360, 27, 124, 153, 115, 4],  // capim 2
-    [488, 0, 84, 180, 250, 1],    // placa com garrafa
-    [576, 31, 97, 149, 105, 2],   // hidrante
-    [677, 25, 94, 155, 115, 2],   // vaso com cacto
-    [775, 13, 98, 167, 150, 2]    // vaso com palmeira
+    [0, 0, 74, 180, 360, 1],// poste
+    [82, 0, 199, 180, 120, 3],// moita
+    [289, 0, 149, 180, 125, 4],// capim
+    [446, 0, 161, 180, 115, 4],// capim 2
+    [615, 0, 81, 180, 250, 1],// placa com garrafa
+    [704, 0, 115, 180, 105, 2],// hidrante
+    [827, 0, 105, 180, 115, 2],// vaso com cacto
+    [940, 0, 123, 180, 150, 2] // vaso com palmeira
   ];
   const FG_TOTAL = FG_CELLS.reduce((a, c) => a + c[5], 0);
   // dentro da fábrica: pilar, engradados, bombona, extintor, cone, fardo, paleteira, cavalete (Gemini 14B)
@@ -2650,14 +2652,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const PISO_AV = new Image(); PISO_AV.src = 'assets/cenario/piso-avenida.webp';
   const FG_FAB_IMG = new Image(); FG_FAB_IMG.src = 'assets/cenario/primeiro-plano-fabrica.webp';
   const FG_FAB_CELLS = [
-    [0, 0, 53, 180, 330, 1],       // pilar amarelo
-    [61, 0, 137, 180, 128, 3],     // engradados
-    [206, 0, 125, 180, 108, 3],    // bombona azul
-    [339, 0, 88, 180, 115, 2],     // extintor
+    [0, 0, 51, 180, 330, 1],    // pilar amarelo
+    [59, 0, 133, 180, 128, 3],    // engradados
+    [200, 0, 117, 180, 108, 3],    // bombona azul
+    [325, 0, 87, 180, 115, 2],    // extintor
     [0, 0, 0, 0, 86, 3, 'cone'],   // cone (o mesmo dos obstáculos)
-    [583, 0, 215, 180, 104, 3],    // fardo de garrafas
+    [420, 0, 204, 180, 104, 3],    // fardo de garrafas
     [0, 0, 0, 0, 98, 2, 'paleteira'],   // paleteira (a mesma dos obstáculos)
-    [1003, 0, 160, 180, 104, 2]    // cavalete de piso molhado
+    [632, 0, 155, 180, 104, 2]     // cavalete de piso molhado
   ];
   function drawFgSet(img, cells, alpha) {
     const total = cells.reduce((a, c) => a + c[5], 0);
@@ -3029,7 +3031,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
   }
   function drawProp(o) {
-    const im = sc(o.name);
+    const im = sc(o.img || o.name);
     ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(o.x + o.w / 2, GROUND + 2, o.w * .55, 4, 0, 0, TAU); ctx.fill();
     if (!im) { ctx.fillStyle = '#b07a44'; ctx.fillRect(o.x, GROUND - o.h, o.w, o.h); return; }
     const h = o.w * im.naturalHeight / im.naturalWidth;
@@ -3039,8 +3041,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const im = sc(o.img);
     ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(o.x + o.w / 2, GROUND + 2, o.w * .55, 4, 0, 0, TAU); ctx.fill();
     if (!im) { drawBin(o.x + 6, GROUND, BIN_IMGS.indexOf(o.img)); return; }
-    const h = o.h + 8, w = im.naturalWidth * h / im.naturalHeight;
-    ctx.drawImage(im, o.x + o.w / 2 - w / 2, GROUND - h + 4, w, h);
+    const h = o.h + 4, w = im.naturalWidth * h / im.naturalHeight;     // lixeira 3D: imagem justa
+    ctx.drawImage(im, o.x + o.w / 2 - w / 2, GROUND - h + 3, w, h);
   }
   // lata especial: raios dourados girando atrás e a lata girando no próprio eixo
   const LATA_IMG = new Image(); LATA_IMG.src = 'assets/lata.webp';
