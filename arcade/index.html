@@ -225,7 +225,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // câmera afastada: o mundo tem 1/ZOOM do tamanho da tela (mais céu para os pulos altos e mais pista à frente).
   // A tela continua 960×360 (proporção 8:3); tudo é desenhado em escala ZOOM.
   const ZOOM = .82;
-  const W = Math.round(960 / ZOOM), H = Math.round(360 / ZOOM), GROUND = H - 70, PX = 170, TAU = Math.PI * 2;
+  const W = Math.round(960 / ZOOM), H = Math.round(360 / ZOOM), GROUND = H - 110, PX = 170, TAU = Math.PI * 2;   // pista a ~75% da altura (2026-11-18; antes H − 70 = 84%, parecia jogar "olhando para baixo")
+  const FLOOR_H = H - GROUND;                                                 // altura do chão abaixo da pista (os pisos esticam para cobrir)
+  let camY = 0;                                                               // câmera desce um pouco nos pulos bem altos (o mascote nunca sai pelo topo)
   const G = 2800, JUMP_V = 820, DJUMP_V = 720, MAX_JUMP = 205;
   const START_SPEED = 400, MAX_SPEED = 1000, ACCEL = 5.5;   // 2026-11-18: jogadores acharam rápido demais (antes 440 / 1080 / 9)
 
@@ -1003,6 +1005,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // ================================================================
   function update(dt) {
     const realDt = dt;
+    { const top = GROUND - player.y - 140, want = (state === 'running' || state === 'dying') ? clamp(16 - top, 0, 90) : 0;   // topo do mascote (com veículo) a 16 px da borda
+      camY += (want - camY) * (1 - Math.exp(-realDt * 7)); }
     if (state === 'running' && skills.lento > 0) dt *= .55;   // câmera lenta da Uva
     t += dt;
     shake = Math.max(0, shake - dt * 40);
@@ -2611,14 +2615,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       nightFilter(.5);
       const g = ctx.createLinearGradient(0, GROUND, 0, H); g.addColorStop(0, '#c9a36c'); g.addColorStop(1, '#a37845');
       ctx.fillStyle = g; ctx.fillRect(0, GROUND, W, H - GROUND);
-      if (sc('rua')) strip(SCENE.rua, 1, GROUND - 18, 92, false);   // guia com luzes + calçada
+      if (sc('rua')) strip(SCENE.rua, 1, GROUND - 18, 92 * (FLOOR_H + 18) / 88, false);   // guia com luzes + calçada
       else strip(chao, 1, GROUND - 24, 96);
       const fab = biomeWeights().fabrica;
       const ave = biomeWeights().canavial;                                   // trecho Athenas Paulista: avenida asfaltada (Gemini 16A)
-      if (ave > .01 && ok(PISO_AV)) { ctx.save(); ctx.globalAlpha = ave; ctx.fillStyle = '#8d9196'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_AV, 1, GROUND - 24, 100, false); ctx.restore(); }
+      if (ave > .01 && ok(PISO_AV)) { ctx.save(); ctx.globalAlpha = ave; ctx.fillStyle = '#8d9196'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_AV, 1, GROUND - 24, 100 * (FLOOR_H + 24) / 94, false); ctx.restore(); }
       const cid = biomeWeights().cidade;                                     // cidade: calçada de pedra portuguesa (Gemini 15A)
-      if (cid > .01 && ok(PISO_CID)) { ctx.save(); ctx.globalAlpha = cid; ctx.fillStyle = '#b9b1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_CID, 1, GROUND - 24, 100, false); ctx.restore(); }
-      if (fab > .01) { ctx.save(); ctx.globalAlpha = fab; if (ok(PISO_FAB)) { ctx.fillStyle = '#9aa1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_FAB, 1, GROUND - 24, 100, false); } else drawFactoryFloor(); ctx.restore(); }
+      if (cid > .01 && ok(PISO_CID)) { ctx.save(); ctx.globalAlpha = cid; ctx.fillStyle = '#b9b1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_CID, 1, GROUND - 24, 100 * (FLOOR_H + 24) / 94, false); ctx.restore(); }
+      if (fab > .01) { ctx.save(); ctx.globalAlpha = fab; if (ok(PISO_FAB)) { ctx.fillStyle = '#9aa1a6'; ctx.fillRect(0, GROUND - 24, W, H); strip(PISO_FAB, 1, GROUND - 24, 100 * (FLOOR_H + 24) / 94, false); } else drawFactoryFloor(); ctx.restore(); }
             return;
     }
     const off = dist % 48;
@@ -3354,7 +3358,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const b = powerBanner; if (!b) return;
     const a = t - b.t0; if (a > 2.2) { powerBanner = null; return; }
     const pop = a < .18 ? .6 + a / .18 * .4 : 1, fade = a > 1.8 ? 1 - (a - 1.8) / .4 : 1;
-    ctx.save(); ctx.globalAlpha = fade; ctx.translate(W / 2, 112); ctx.scale(pop, pop);
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(W / 2, 204); ctx.scale(pop, pop);   // abaixo do texto do combo
     text3d(b.title, 0, 0, 38, '#ffffff', b.color, 'rgba(40,20,0,.85)', 4);
     ctx.font = `20px ${UI}`; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
     ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.strokeText(b.desc, 0, 30); ctx.fillStyle = '#ffffff'; ctx.fillText(b.desc, 0, 30);
@@ -3835,6 +3839,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.save();
     if (shake > 0) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
     drawSky();
+    ctx.translate(0, camY);                                                  // mundo (cenário, pista, mascote) com a câmera; céu e HUD fixos
     drawScenery();
     drawGround();
     coins.forEach(drawCoin);
@@ -3849,9 +3854,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawPlayerFx();
     drawForeground();
     drawNearFg();
+    ctx.translate(0, -camY);
     if (dark > 0) { ctx.fillStyle = `rgba(14,22,58,${dark * .22})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
     if (skills.lento > 0) { ctx.fillStyle = `rgba(120,60,200,${.12 * Math.min(1, skills.lento)})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
-    drawGlows();
+    ctx.save(); ctx.translate(0, camY); drawGlows(); ctx.restore();
     drawSpeedLines();
     // vinheta
     const v = ctx.createRadialGradient(W / 2, H / 2, H * .5, W / 2, H / 2, W * .65);
