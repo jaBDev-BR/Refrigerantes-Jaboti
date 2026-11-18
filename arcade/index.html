@@ -2406,7 +2406,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     return c;
   }
-  const BG_MUTE = 'blur(1.5px) saturate(.5) brightness(1.06) contrast(.82)', FAB_MUTE = 'blur(1.8px) saturate(.45) brightness(.86) contrast(.82)';   // fundo calmo: obstáculos se destacam
+  // fundo bem desfocado e desbotado (2026-11-18, opção C+D escolhida pelo usuário): o fundo vira "clima", os obstáculos ficam nítidos na frente
+  const BG_MUTE = 'blur(3.5px) saturate(.4) brightness(1.1) contrast(.7)', FAB_MUTE = 'blur(3.5px) saturate(.4) brightness(.84) contrast(.72)';
   function strip(im, factor, y, h, mirror = true, offset = 0) {
     const w = im.naturalWidth * h / im.naturalHeight, o = dist * factor + offset, src = N(im);
     for (let k = Math.floor(o / w); k * w - o < W; k++) {
@@ -2590,8 +2591,17 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     ctx.restore();
     // alambrado na beira da rua (cerca de pasto antiga como reserva); some dentro da fábrica
-    ctx.save(); ctx.globalAlpha = (1 - bw.fabrica) * .5;                   // tela de arame bem suave (o padrão riscado escondia os obstáculos)
-    if (bw.fabrica < .99) { if (sc('alambrado')) strip(bgSoft(SCENE.alambrado, 'blur(1px) saturate(.6)'), .8, GROUND - 76, 66, false); else strip(SCENE.cerca, .5, GROUND - 60, 62, false); }
+    // mureta lisa na beira da calçada (2026-11-18, no lugar do alambrado): faixa de cor única bem atrás dos obstáculos
+    ctx.save(); ctx.globalAlpha = 1 - bw.fabrica;
+    if (bw.fabrica < .99) {
+      const top = GROUND - 56, g = ctx.createLinearGradient(0, top, 0, GROUND);
+      g.addColorStop(0, D('e9dfcc')); g.addColorStop(1, D('cbbda2'));
+      ctx.fillStyle = g; ctx.fillRect(0, top, W, GROUND - top);
+      ctx.fillStyle = D('f7f1e4'); ctx.fillRect(0, top - 6, W, 7);                       // capa da mureta
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, top + 1, W, 2);
+      ctx.strokeStyle = 'rgba(120,100,70,.18)'; ctx.lineWidth = 2; const o = (dist * .8) % 140;   // juntas
+      for (let x = -o; x < W; x += 140) { ctx.beginPath(); ctx.moveTo(x, top + 2); ctx.lineTo(x, GROUND); ctx.stroke(); }
+    }
     ctx.restore();
       }
 
@@ -3828,10 +3838,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawScenery();
     drawGround();
     coins.forEach(drawCoin);
-    // obstáculos bem visíveis (2026-11-18): 1ª passada = brilho claro em volta (destaca no fundo escuro/colorido),
-    // 2ª passada = o objeto com sombra escura (destaca no fundo claro). Juntas formam um contorno nítido em qualquer cenário.
+    // obstáculos bem visíveis (2026-11-18, opção C+D): contorno escuro grosso + o objeto de novo com sombra escura por baixo
     const drawObs = o => o.kind === 'can' ? drawCan(o) : o.kind === 'crate' ? drawCrates(o) : o.kind === 'bin' ? drawBinObs(o) : o.kind === 'hang' ? drawHang(o) : o.kind === 'drone' ? drawDrone(o) : o.kind === 'prop' ? drawProp(o) : o.kind === 'rail' ? drawRail(o) : o.kind === 'ramp' ? drawRamp(o) : o.kind === 'stairs' ? drawStairs(o) : drawBottle(o);
-    ctx.save(); ctx.shadowColor = dark > .5 ? 'rgba(255,240,200,.75)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 7; obstacles.forEach(drawObs); ctx.restore();
+    // 1ª passada: contorno escuro grosso (4 sombras deslocadas = borda de desenho animado em volta do objeto)
+    ctx.save(); const oc = '#1a0e05'; ctx.filter = `drop-shadow(2px 0 0 ${oc}) drop-shadow(-2px 0 0 ${oc}) drop-shadow(0 2px 0 ${oc}) drop-shadow(0 -2px 0 ${oc})`; obstacles.forEach(drawObs); ctx.restore();
     ctx.save(); ctx.shadowColor = 'rgba(20,10,0,.7)'; ctx.shadowBlur = 9; ctx.shadowOffsetY = 2; obstacles.forEach(drawObs); ctx.restore();
     items.forEach(drawItem);
     drawParticles();
