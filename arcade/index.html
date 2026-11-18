@@ -227,7 +227,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const ZOOM = .82;
   const W = Math.round(960 / ZOOM), H = Math.round(360 / ZOOM), GROUND = H - 70, PX = 170, TAU = Math.PI * 2;
   const G = 2800, JUMP_V = 820, DJUMP_V = 720, MAX_JUMP = 205;
-  const START_SPEED = 440, MAX_SPEED = 1080, ACCEL = 9;
+  const START_SPEED = 400, MAX_SPEED = 1000, ACCEL = 5.5;   // 2026-11-18: jogadores acharam rápido demais (antes 440 / 1080 / 9)
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -567,7 +567,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     player = { y: 0, vy: 0, ground: true, jumps: 0, coyote: 0, buffer: 0, spin: -1, land: 0, stretch: 0, dx: 0, drop: 0, deadT: 0, landedDead: false, rotDead: 0, slide: false, blink: 2, grind: null };
     pose = { ...IDLE_POSE };
     obstacles = []; coins = []; particles = []; texts = [];
-    speed = START_SPEED; dist = 0; score = 0; bonus = 0; caps = 0; gap = 600; runTime = 0; rankSent = null; boardFly = null;
+    speed = START_SPEED; dist = 0; score = 0; bonus = 0; caps = 0; gap = 800; runTime = 0; rankSent = null; boardFly = null;
     flash = 0; shake = 0; hitstop = 0; newBest = false; runPhase = 0; stepIndex = 0; celebrate = 0;
     combo = { n: 0, pts: 0, ground: 0, t0: -9, names: [] }; comboMsg = null; trailHist = [];
     skills = {}; items = []; skillTimer = 3.5; lataTimer = 22 + Math.random() * 10; invuln = 0; pts = 0; vel = START_SPEED;
@@ -678,15 +678,15 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // poderes das garrafas: cada sabor ativa um efeito temporário
   const SKILLS = {
-    turbo:  { label: 'TURBO GUARANÁ', short: 'TURBO', dur: 4.5, color: '#ffd23a', flavors: ['Guaraná', 'Guaraná Zero'] },
-    escudo: { label: 'ESCUDO COLA', short: 'ESCUDO', dur: 14, color: '#7fd0ff', flavors: ['Cola', 'Cola Zero'] },
-    ima:    { label: 'ÍMÃ DE TAMPINHAS', short: 'ÍMÃ', dur: 9, color: '#f08a1c', flavors: ['Laranja', 'Abacaxi'] },
-    pulo:   { label: 'PULO TRIPLO', short: 'PULO', dur: 9, color: '#9bcb45', flavors: ['Limão', 'Maçã'] },
-    lento:  { label: 'CÂMERA LENTA', short: 'LENTO', dur: 5, color: '#b07ae0', flavors: ['Uva'] },
-    dobro:  { label: 'PONTOS x2', short: 'x2', dur: 10, color: '#ff6a5f', flavors: ['Tubaína'] }
+    turbo:  { label: 'TURBO GUARANÁ', desc: 'Atravessa os obstáculos!', short: 'TURBO', dur: 4.5, color: '#ffd23a', flavors: ['Guaraná', 'Guaraná Zero'] },
+    escudo: { label: 'ESCUDO COLA', desc: 'Aguenta uma batida', short: 'ESCUDO', dur: 14, color: '#7fd0ff', flavors: ['Cola', 'Cola Zero'] },
+    ima:    { label: 'ÍMÃ DE TAMPINHAS', desc: 'Puxa as tampinhas', short: 'ÍMÃ', dur: 9, color: '#f08a1c', flavors: ['Laranja', 'Abacaxi'] },
+    pulo:   { label: 'PULO TRIPLO', desc: 'Pule 3 vezes no ar', short: 'PULO', dur: 9, color: '#9bcb45', flavors: ['Limão', 'Maçã'] },
+    lento:  { label: 'CÂMERA LENTA', desc: 'Tudo fica mais devagar', short: 'LENTO', dur: 5, color: '#b07ae0', flavors: ['Uva'] },
+    dobro:  { label: 'PONTOS x2', desc: 'Pontos em dobro', short: 'x2', dur: 10, color: '#ff6a5f', flavors: ['Tubaína'] }
   };
   // lata especial: rara, liga turbo + ímã + pontos em dobro ao mesmo tempo
-  const LATA = { label: 'LATA ESPECIAL!', dur: 6, color: '#ffd23a', combo: ['turbo', 'ima', 'dobro'] };
+  const LATA = { label: 'LATA ESPECIAL!', desc: 'Turbo + ímã + pontos x2!', dur: 6, color: '#ffd23a', combo: ['turbo', 'ima', 'dobro'] };
   const SKILL_KEYS = Object.keys(SKILLS);
   const flavorByName = n => FLAVORS.find(f => f.name === n);
   const mult = () => skills.dobro > 0 ? 2 : 1;
@@ -804,14 +804,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       LATA.combo.forEach(k => { skills[k] = Math.max(skills[k] || 0, LATA.dur); });
       sfx.power(); setTimeout(() => sfx.milestone(), 180);
       ring(x, y, LATA.color); ring(x, y, '#ffffff'); sparkle(x, y, 28, LATA.color); confetti(x, y, 26);
-      popText(PX + 50, GROUND - player.y - 120, LATA.label, LATA.color);
+      powerBanner = { title: LATA.label, desc: LATA.desc, color: LATA.color, t0: t };
       flash = Math.max(flash, .6); shake = Math.max(shake, 5);
       return;
     }
     const sk = SKILLS[key];
     skills[key] = sk.dur;
     sfx.power(); ring(x, y, sk.color); sparkle(x, y, 16, sk.color);
-    popText(PX + 50, GROUND - player.y - 120, sk.label, sk.color);
+    powerBanner = { title: sk.label, desc: sk.desc, color: sk.color, t0: t };
     flash = Math.max(flash, .3);
   }
   function smash(o) {
@@ -2406,7 +2406,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     return c;
   }
-  const BG_MUTE = 'blur(1px) saturate(.68) brightness(1.04)', FAB_MUTE = 'blur(1.3px) saturate(.55) brightness(.9) contrast(.9)';
+  const BG_MUTE = 'blur(1.5px) saturate(.5) brightness(1.06) contrast(.82)', FAB_MUTE = 'blur(1.8px) saturate(.45) brightness(.86) contrast(.82)';   // fundo calmo: obstáculos se destacam
   function strip(im, factor, y, h, mirror = true, offset = 0) {
     const w = im.naturalWidth * h / im.naturalHeight, o = dist * factor + offset, src = N(im);
     for (let k = Math.floor(o / w); k * w - o < W; k++) {
@@ -2548,7 +2548,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     haze(GROUND - 140, GROUND - 40, .14);
     // colinas com árvores
     strip(ok(SCENE.colinas) ? bgSoft(SCENE.colinas, BG_MUTE) : SCENE.colinas, .2, GROUND - 108, 70);
-    haze(GROUND - 108, GROUND - 38, .16);                                    // mais névoa: o campo também fica atrás dos obstáculos
+    haze(GROUND - 108, GROUND - 38, .26);                                    // mais névoa: o campo também fica atrás dos obstáculos
     }
     ctx.restore();
     // canavial e cidade: faixa atrás do alambrado (o céu do jogo continua aparecendo)
@@ -2557,7 +2557,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       // cidade (feita a partir de foto da cidade real): mais alta — igreja e prédio aparecem no horizonte, casas do mesmo tamanho de antes
       const im = bgSoft(TRECHO[n], BG_MUTE);
       ctx.save(); ctx.globalAlpha = bw[n]; strip(im, .2, GROUND - 306, 280, false);   // as duas faixas novas (foto real) têm o mesmo formato
-      haze(GROUND - 200, GROUND - 20, .2);                                   // névoa: o fundo fica "mais longe"
+      haze(GROUND - 200, GROUND - 20, .3);                                   // névoa: o fundo fica "mais longe"
       ctx.restore();
     });
     // dentro da fábrica: cobre o fundo todo, do teto até a pista, com luz própria (escurece pouco à noite)
@@ -2565,7 +2565,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.save(); ctx.globalAlpha = bw.fabrica;
       ctx.fillStyle = '#26282d'; ctx.fillRect(0, 0, W, 8);                 // galpão ocupa a tela toda (teto em arco no alto)
       nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .2, 2, GROUND - 2, false); nightFilter(.55);
-      ctx.fillStyle = 'rgba(46,40,36,.16)'; ctx.fillRect(0, 0, W, GROUND);     // galpão um pouco mais escuro: obstáculos na frente se destacam
+      ctx.fillStyle = 'rgba(46,40,36,.24)'; ctx.fillRect(0, 0, W, GROUND);     // galpão um pouco mais escuro: obstáculos na frente se destacam
       ctx.restore();
     }
     
@@ -2590,8 +2590,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     ctx.restore();
     // alambrado na beira da rua (cerca de pasto antiga como reserva); some dentro da fábrica
-    ctx.save(); ctx.globalAlpha = 1 - bw.fabrica;
-    if (bw.fabrica < .99) { if (sc('alambrado')) strip(SCENE.alambrado, .8, GROUND - 76, 66, false); else strip(SCENE.cerca, .5, GROUND - 60, 62, false); }
+    ctx.save(); ctx.globalAlpha = (1 - bw.fabrica) * .5;                   // tela de arame bem suave (o padrão riscado escondia os obstáculos)
+    if (bw.fabrica < .99) { if (sc('alambrado')) strip(bgSoft(SCENE.alambrado, 'blur(1px) saturate(.6)'), .8, GROUND - 76, 66, false); else strip(SCENE.cerca, .5, GROUND - 60, 62, false); }
     ctx.restore();
       }
 
@@ -2689,7 +2689,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const total = cells.reduce((a, c) => a + c[5], 0);
     const src = N(blurred(img, 1.4)), fo = dist * 1.4, tile = 520;
     for (let k = Math.floor(fo / tile) - 1; k <= Math.floor((fo + W) / tile) + 1; k++) {
-      if (hash(k * 5.7) < .35) continue;                                  // nem todo trecho tem objeto
+      if (hash(k * 5.7) < .55) continue;                                  // nem todo trecho tem objeto (menos poluição na frente)
       let r = hash(k * 2.9) * total, i = 0;
       while (r > cells[i][5]) { r -= cells[i][5]; i++; }
       let [sx, sy, sw, sh, th, , own] = cells[i], im = src;
@@ -2698,7 +2698,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const x = k * tile + hash(k * 8.3) * 260 - fo, base = H + 18 + hash(k * 1.7) * 14;
       if (x + tw < 0 || x > W) continue;
       const near = x < PX + 70 && x + tw > PX - 70;                        // passando na frente do mascote
-      ctx.globalAlpha = (near ? .45 : th > 200 ? .6 : .92) * alpha;       // altos (poste, pilar) mais transparentes: não escondem obstáculos
+      ctx.globalAlpha = (near ? .35 : th > 200 ? .45 : .7) * alpha;       // altos (poste, pilar) mais transparentes: não escondem obstáculos
       ctx.drawImage(im, sx, sy, sw, sh, x, base - th, tw, th);
     }
     ctx.globalAlpha = 1;
@@ -3321,18 +3321,34 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (skills.pulo > 0 && state === 'running' && !player.ground && player.vy > 600 && Math.random() < .5) ring(PX, GROUND - player.y, '#96f05a');
     if (skills.pulo > 0 && state === 'running' && Math.random() < .45) particles.push({ type: 'spark', x: PX + (Math.random() - .5) * 30, y: GROUND - player.y - 4, vx: (Math.random() - .5) * 40, vy: 30, life: .4, max: .4, r: 2, color: '#b8f06a' });
   }
+  // poderes ativos no canto (2026-11-18: maior e legível): pílula escura com garrafa, nome, barra e segundos restantes
   function drawSkillHud(ink) {
     let y = 50;
     for (const k of SKILL_KEYS) {
       if (!(skills[k] > 0)) continue;
       const sk = SKILLS[k], frac = clamp(skills[k] / sk.dur, 0, 1), f = flavorByName(sk.flavors[0]);
-      if (!drawBottleArt(f, true, 24, y + 24, 26)) ctx.drawImage(bottleSprite(f, 24, 58), 18, y - 2, 11, 26);
-      ctx.fillStyle = 'rgba(0,0,0,.25)'; rr(34, y + 12, 90, 7, 3.5); ctx.fill();
-      ctx.fillStyle = sk.color; rr(34, y + 12, 90 * frac, 7, 3.5); ctx.fill();
-      ctx.fillStyle = ink; ctx.font = '800 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-      ctx.fillText(sk.short, 34, y + 9);
-      y += 30;
+      ctx.fillStyle = 'rgba(10,20,30,.55)'; rr(10, y - 4, 178, 40, 20); ctx.fill();
+      ctx.strokeStyle = sk.color; ctx.lineWidth = 2; ctx.stroke();
+      if (!drawBottleArt(f, true, 30, y + 33, 34)) ctx.drawImage(bottleSprite(f, 24, 58), 22, y - 1, 14, 34);
+      ctx.font = `19px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(sk.short, 48, y + 16); ctx.fillStyle = '#ffffff'; ctx.fillText(sk.short, 48, y + 16);
+      ctx.font = `15px ${UI}`; ctx.textAlign = 'right'; ctx.fillStyle = sk.color; ctx.fillText(Math.ceil(skills[k]) + 's', 178, y + 16);
+      ctx.fillStyle = 'rgba(255,255,255,.22)'; rr(48, y + 22, 130, 8, 4); ctx.fill();
+      ctx.fillStyle = sk.color; rr(48, y + 22, 130 * frac, 8, 4); ctx.fill();
+      y += 46;
     }
+  }
+  // aviso grande no meio da tela quando pega um poder: nome + o que ele faz
+  let powerBanner = null;
+  function drawPowerBanner() {
+    const b = powerBanner; if (!b) return;
+    const a = t - b.t0; if (a > 2.2) { powerBanner = null; return; }
+    const pop = a < .18 ? .6 + a / .18 * .4 : 1, fade = a > 1.8 ? 1 - (a - 1.8) / .4 : 1;
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(W / 2, 112); ctx.scale(pop, pop);
+    text3d(b.title, 0, 0, 38, '#ffffff', b.color, 'rgba(40,20,0,.85)', 4);
+    ctx.font = `20px ${UI}`; ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.strokeText(b.desc, 0, 30); ctx.fillStyle = '#ffffff'; ctx.fillText(b.desc, 0, 30);
+    ctx.restore();
   }
   function drawHud() {
     ctx.font = '800 20px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
@@ -3351,6 +3367,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       drawSkillHud(ink);
     }
     drawCombo();
+    if (state === 'running') drawPowerBanner();
     texts.forEach(x => {
       ctx.globalAlpha = clamp(x.life * 2, 0, 1);
       ctx.font = '900 18px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -3811,9 +3828,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawScenery();
     drawGround();
     coins.forEach(drawCoin);
-    ctx.save(); ctx.shadowColor = 'rgba(20,10,0,.62)'; ctx.shadowBlur = 8;   // contorno escuro suave: obstáculos saltam do cenário
-    obstacles.forEach(o => o.kind === 'can' ? drawCan(o) : o.kind === 'crate' ? drawCrates(o) : o.kind === 'bin' ? drawBinObs(o) : o.kind === 'hang' ? drawHang(o) : o.kind === 'drone' ? drawDrone(o) : o.kind === 'prop' ? drawProp(o) : o.kind === 'rail' ? drawRail(o) : o.kind === 'ramp' ? drawRamp(o) : o.kind === 'stairs' ? drawStairs(o) : drawBottle(o));
-    ctx.restore();
+    // obstáculos bem visíveis (2026-11-18): 1ª passada = brilho claro em volta (destaca no fundo escuro/colorido),
+    // 2ª passada = o objeto com sombra escura (destaca no fundo claro). Juntas formam um contorno nítido em qualquer cenário.
+    const drawObs = o => o.kind === 'can' ? drawCan(o) : o.kind === 'crate' ? drawCrates(o) : o.kind === 'bin' ? drawBinObs(o) : o.kind === 'hang' ? drawHang(o) : o.kind === 'drone' ? drawDrone(o) : o.kind === 'prop' ? drawProp(o) : o.kind === 'rail' ? drawRail(o) : o.kind === 'ramp' ? drawRamp(o) : o.kind === 'stairs' ? drawStairs(o) : drawBottle(o);
+    ctx.save(); ctx.shadowColor = dark > .5 ? 'rgba(255,240,200,.75)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 7; obstacles.forEach(drawObs); ctx.restore();
+    ctx.save(); ctx.shadowColor = 'rgba(20,10,0,.7)'; ctx.shadowBlur = 9; ctx.shadowOffsetY = 2; obstacles.forEach(drawObs); ctx.restore();
     items.forEach(drawItem);
     drawParticles();
     drawGas();
