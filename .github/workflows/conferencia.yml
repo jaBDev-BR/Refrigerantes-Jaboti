@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 jobs:
   conferir:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04          # o navegador de teste (Playwright 1.55) não roda no ubuntu-latest (26.04)
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
