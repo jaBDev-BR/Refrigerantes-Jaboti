@@ -594,7 +594,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (n >= 2 && ok) {
       const extra = combo.pts * (m - 1); bonus += extra;
       comboMsg = { text: 'COMBO x' + m + '!', sub: '+' + extra, life: 1.6, color: m >= 4 ? '#ff6a5f' : m >= 3 ? '#ffd23a' : '#7fd0ff' };
-      sfx.comboEnd(); confetti(PX + 40, GROUND - player.y - 90, 10 + m * 4);
+      sfx.comboEnd();
     } else if (n >= 2) { comboMsg = { text: 'COMBO PERDIDO', sub: '', life: 1.2, color: '#ff6a5f' }; sfx.comboLost(); }
     combo = { n: 0, pts: 0, ground: 0, t0: -9, names: [] };
   }
@@ -695,6 +695,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function sparkle(x, y, n, color = '#ffd84a') {
     for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = 80 + Math.random() * 160; particles.push({ type: 'spark', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5, max: .5, r: 2 + Math.random() * 2.5, color }); }
+  }
+  // faíscas de metal do grind (2026-11-19): riscos finos, quentes (branco → amarelo → laranja → vermelho ao esfriar),
+  // jogados para trás e para cima, caem com gravidade e quicam no chão; desenhadas com brilho aditivo em drawParticles
+  function grindSparks(x, y, n, forca = 1) {
+    for (let i = 0; i < n; i++) {
+      const v = (260 + Math.random() * 520) * forca, a = Math.PI + (Math.random() - .62) * 1.15;   // leque para trás, mais para cima
+      const life = .22 + Math.random() * .38;
+      particles.push({ type: 'gspark', x: x + (Math.random() - .5) * 6, y: y - Math.random() * 3, vx: Math.cos(a) * v - 120, vy: Math.sin(a) * v - Math.random() * 120,
+        life, max: life, w: 1.2 + Math.random() * 1.4, quica: Math.random() < .5 });
+    }
   }
   function ring(x, y, color = '#ffffff') { particles.push({ type: 'ring', x, y, life: .35, max: .35, r: 10, color }); }
   function confetti(x, y, n) {
@@ -839,11 +849,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
   }
   function activate(key, x, y) {
-    gasBurst(PX + 6, GROUND - player.y - 58, key === 'lata' ? 170 : 130);
+    // (2026-11-19) sem o gás da garrafa em cima do mascote (cobria os ícones dos poderes); gasBurst() continua disponível
     if (key === 'lata') {
       LATA.combo.forEach(k => { skills[k] = Math.max(skills[k] || 0, LATA.dur); }); missao('garrafas', 1); vib(60);
       sfx.power(); setTimeout(() => sfx.milestone(), 180);
-      ring(x, y, LATA.color); ring(x, y, '#ffffff'); sparkle(x, y, 28, LATA.color); confetti(x, y, 26);
       powerBanner = { title: LATA.label, desc: LATA.desc, color: LATA.color, t0: t };
       flash = Math.max(flash, .6); shake = Math.max(shake, 5);
       return;
@@ -851,7 +860,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const sk = SKILLS[key];
     skills[key] = sk.dur;
     if (!stats.poderes.includes(key)) stats.poderes.push(key); missao('garrafas', 1); vib(40);
-    sfx.power(); ring(x, y, sk.color); sparkle(x, y, 16, sk.color);
+    sfx.power();
     powerBanner = { title: sk.label, desc: sk.desc, color: sk.color, t0: t };
     flash = Math.max(flash, .3);
   }
@@ -868,7 +877,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (invuln > 0) return false;
     if (skills.escudo > 0) {
       delete skills.escudo; invuln = 1.2; smash(o); sfx.shield(); shieldBurst();
-      ring(PX, GROUND - player.y - 55, '#7fd0ff'); sparkle(PX, GROUND - player.y - 55, 20, '#bfe8ff');
       return false;
     }
     die(); return true;
@@ -939,7 +947,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const T = TRICKS[player.trick];
     popText(PX + 70, Math.max(70, GROUND - player.y - 110), T.label, T.color);
     const tp = (player.trick === 'duplo' || player.trick === 'duplosk' ? 50 : 25) * mult(); bonus += tp; comboAdd(T.label.replace('!', ''), tp);
-    ring(PX, GROUND - player.y - 40, '#ffffff'); sparkle(PX, GROUND - player.y - 30, 8, '#ffffff'); sfx.djump();
+    sfx.djump();
   }
   // grind no corrimão (só de skate): cai em cima dele vindo de um pulo
   const GRINDS = [
@@ -992,7 +1000,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const g = pick((scooterOn() ? GRINDS_SC : GRINDS).filter(x => x !== lastGrind)); lastGrind = g;
     const slope = o.kind === 'stairs' ? Math.atan2(o.h, o.down) : 0;
     player.grind = { o, g, t: 0, slope }; player.ground = false; player.spin = -1; player.trail = []; player.vy = 0; player.y = railTop(o, PX) - g.dy; player.jumps = 0; player.land = .6;
-    popText(PX + 70, GROUND - player.y - 130, g.label, g.color); sfx.grind(); sparkle(PX + 10, GROUND - player.y - g.dy, 12, '#ffe08a');
+    popText(PX + 70, GROUND - player.y - 130, g.label, g.color); sfx.grind(); grindSparks(grindX(), GROUND - railTop(o, grindX()) + 1, 26, 1.3);
   }
   function endGrind(hop) {
     const G2 = player.grind; if (!G2) return;
@@ -1076,7 +1084,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       score = Math.floor(pts) + bonus;
       if (Math.floor(score / 100) > Math.floor(prev / 100)) {
         flash = 1; celebrate = .8; sfx.milestone();
-        confetti(PX + 10, GROUND - player.y - 80, 22);
         popText(PX + 40, GROUND - player.y - 110, Math.floor(score / 100) * 100 + '!', '#ffffff');
       }
 
@@ -1100,7 +1107,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
             player.ground = false; player.jumps = 1; player.coyote = 0; player.slope = 0;
             if (o && o.kind === 'ramp') {
               player.vy = 900 + speed * .12; player.stretch = 1; sfx.djump(); dust(PX, GROUND - player.y, 8, 1.2);
-              bonus += 20 * mult(); popText(PX + 70, GROUND - player.y - 130, 'RAMPA! +' + 20 * mult(), '#7fd0ff'); comboAdd('RAMPA', 20 * mult()); ring(PX, GROUND - player.y - 30, '#ffffff');
+              bonus += 20 * mult(); popText(PX + 70, GROUND - player.y - 130, 'RAMPA! +' + 20 * mult(), '#7fd0ff'); comboAdd('RAMPA', 20 * mult());
             } else if (o && railTop(o, PX) > 0) {                          // ollie direto para o corrimão: desce a escada no grind
               sfx.jump(); startGrind(o);
             } else { player.vy = 330; player.stairDrop = 1; sfx.jump(); }
@@ -1111,7 +1118,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         const o = player.grind.o, rt = railTop(o, PX); player.grind.t += dt;
         player.vy = 0; player.coyote = 0;
         if (rt >= 0) player.y = rt - player.grind.g.dy;
-        if (Math.random() < .8) particles.push({ type: 'spark', x: grindX() + (Math.random() - .5) * (player.grind.g.tilt ? 12 : 30), y: GROUND - Math.max(rt, railTop(o, grindX())) + 1, vx: -220 - Math.random() * 260, vy: -60 - Math.random() * 140, life: .3, max: .3, r: 1.5 + Math.random() * 2, color: Math.random() < .6 ? '#ffd23a' : '#ffffff' });
+        { const gx = grindX(), gy = GROUND - Math.max(rt, railTop(o, gx)) + 1;
+          player.grind.acc = (player.grind.acc || 0) + dt * 110;                // ~110 faíscas por segundo
+          const n = Math.floor(player.grind.acc); player.grind.acc -= n;
+          grindSparks(gx + (Math.random() - .5) * (player.grind.g.tilt ? 8 : 22), gy, n);
+          if (Math.random() < dt * 3) grindSparks(gx, gy, 10, 1.25); }        // rajada de vez em quando
         if (o.dead || rt < 0) endGrind(true);
       } else if (!player.ground) {
         const prevY = player.y;
@@ -1134,7 +1145,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         player.spin += dt / (player.trick ? TRICKS[player.trick].dur : .42);
         if (player.spin >= 1) {
           player.spin = -1;
-          sparkle(PX, GROUND - player.y - 45, 10, player.trick ? TRICKS[player.trick].color : '#ffffff');
         }
       }
 
@@ -1210,6 +1220,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (p.type === 'dust') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 120 * dt; p.r += dt * 10; }
       else if (p.type === 'hexshard') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * dt; p.rot += p.vr * dt; }
       else if (p.type === 'shockwave') { p.r += 420 * dt; }
+      else if (p.type === 'gspark') {
+        p.px = p.x; p.py = p.y; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 1500 * dt; p.vx *= 1 - dt * 1.2;
+        const chao = GROUND - (wheels() ? floorAt(p.x) : 0);
+        if (p.y > chao && p.vy > 0) { if (p.quica && p.vy > 180) { p.y = chao; p.vy *= -.32; p.vx *= .55; p.quica = false; } else p.life = Math.min(p.life, .04); }
+      }
       else if (p.type === 'spark' || p.type === 'star3d' || p.type === 'ember') { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .92; p.vy *= .92; }
       else if (p.type === 'ring') { p.r += dt * 160; }
       else if (p.type === 'confetti') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 420 * dt; p.rot += p.vr * dt; }
@@ -1627,7 +1642,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     Object.assign(player, { y: 0, vy: 0, ground: true, jumps: 0, coyote: 0, buffer: 0, spin: -1, land: 0, dx: 0, deadT: 0, landedDead: false, rotDead: 0, slide: false, grind: null, slope: 0, stairDrop: 0, trick: null });
     obstacles = obstacles.filter(o => o.x > PX + 520); boardFly = null; gap = Math.max(gap, 520);
     speed = Math.max(START_SPEED * FACIL().start, speed * .85); vel = speed; invuln = 2.5; state = 'running'; last = performance.now();
-    sfx.power(); ring(PX, GROUND - 55, '#ffd23a'); sparkle(PX, GROUND - 55, 24, '#ffd23a'); flash = .4;
+    sfx.power(); flash = .4;
   }
   // ---- compartilhar recorde: imagem 1080×1080 com o mascote do troféu e a pontuação ----
   const SITE_URL = 'https://jabdev-br.github.io/Refrigerantes-Jaboti/arcade/';
@@ -1999,8 +2014,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (player.spin >= 0 && !dead) {
       const tr = player.trail || (player.trail = []);
       if (state === 'running' && !ghostPass) { tr.forEach(g => g.x -= speed / 60 * .55); tr.push({ x: ox, y: oy, r: rot, flip: V.flip, tuck: X.tuck, fi: TF }); if (tr.length > 5) tr.shift(); }
-      tr.slice(0, -1).forEach((g, i, a) => { ctx.globalAlpha = .07 + .2 * (i + 1) / a.length; drawAt(g.x, g.y, g.r, g.flip, g.tuck, g.fi); });
-      ctx.globalAlpha = 1;
+      // (2026-11-19) sem rastro fantasma do mascote nas manobras (pedido do usuário)
     } else if (player.trail) player.trail.length = 0;
     drawAt(ox, oy, rot, V.flip, TF >= 0 ? 1 : X.tuck, TF);
 
@@ -2160,7 +2174,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (player.spin >= 0) {                                                  // rastro da manobra
       const tr = player.trail || (player.trail = []);
       if (state === 'running' && !ghostPass) { tr.forEach(g => g.x -= speed / 60 * .55); tr.push({ x: ox, y: oy, r: rot }); if (tr.length > 5) tr.shift(); }
-      tr.slice(0, -1).forEach((g, i, a) => draw(g.x, g.y, g.r, .07 + .2 * (i + 1) / a.length));
+      // (2026-11-19) sem rastro fantasma nas manobras
     } else if (player.trail) player.trail.length = 0;
     draw(ox, oy, rot, 1);
     if (state === 'running' && player.ground && !ghostPass && Math.random() < .35) {   // poeirinha das rodinhas
@@ -2325,7 +2339,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (player.spin >= 0) {                                                  // rastro da manobra
       const tr = player.trail || (player.trail = []);
       if (state === 'running' && !ghostPass) { tr.forEach(g => g.x -= speed / 60 * .55); tr.push({ x: ox, y: oy, r: tilt }); if (tr.length > 5) tr.shift(); }
-      tr.slice(0, -1).forEach((g, i, a) => draw(g.x, g.y, g.r, .07 + .2 * (i + 1) / a.length));
+      // (2026-11-19) sem rastro fantasma nas manobras
     } else if (player.trail) player.trail.length = 0;
     draw(ox, oy, tilt, 1);
     if (state === 'running' && player.ground && !ghostPass && Math.random() < .35) { dust(ox + (SCG.rear + 9) * k, oy, 1, .5); if (Math.random() < .5) dust(ox + (SCG.front + 9) * k, oy, 1, .5); }
@@ -3429,8 +3443,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.lineCap = 'butt';
     if (player.grind && player.grind.o === o) {                              // brilho onde o skate raspa
       const gx = grindX(), gl = ctx.createRadialGradient(gx, top, 1, gx, top, 26);
-      gl.addColorStop(0, 'rgba(255,230,140,.9)'); gl.addColorStop(1, 'rgba(255,200,60,0)');
-      ctx.fillStyle = gl; ctx.fillRect(gx - 26, top - 26, 52, 52);
+      const fl = .75 + Math.random() * .25;                                  // contato piscando (metal raspando)
+      gl.addColorStop(0, `rgba(255,252,235,${fl})`); gl.addColorStop(.18, `rgba(255,215,110,${.75 * fl})`); gl.addColorStop(.5, `rgba(255,140,40,${.28 * fl})`); gl.addColorStop(1, 'rgba(255,110,30,0)');
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = gl; ctx.fillRect(gx - 26, top - 26, 52, 52); ctx.restore();
     }
   }
   // rampa de madeira (kicker) com lateral vermelha da Jaboti e borda de metal no topo
@@ -3494,8 +3510,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.lineCap = 'butt';
     if (player.grind && player.grind.o === o) {
       const gx = grindX(), gy = GROUND - Math.max(railTop(o, PX), railTop(o, gx)), gl = ctx.createRadialGradient(gx, gy, 1, gx, gy, 26);
-      gl.addColorStop(0, 'rgba(255,230,140,.9)'); gl.addColorStop(1, 'rgba(255,200,60,0)');
-      ctx.fillStyle = gl; ctx.fillRect(gx - 26, gy - 26, 52, 52);
+      const fl = .75 + Math.random() * .25;                                  // contato piscando (metal raspando)
+      gl.addColorStop(0, `rgba(255,252,235,${fl})`); gl.addColorStop(.18, `rgba(255,215,110,${.75 * fl})`); gl.addColorStop(.5, `rgba(255,140,40,${.28 * fl})`); gl.addColorStop(1, 'rgba(255,110,30,0)');
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = gl; ctx.fillRect(gx - 26, gy - 26, 52, 52); ctx.restore();
     }
   }
   function drawProp(o) {
@@ -3647,6 +3665,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const a = clamp(p.life / p.max, 0, 1);
       if (p.type === 'dust') { ctx.fillStyle = `rgba(200,170,120,${a * .7})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }
       else if (p.type === 'spark') { ctx.globalAlpha = a; star(p.x, p.y, p.r * 1.6, p.color); ctx.globalAlpha = 1; }
+      else if (p.type === 'gspark') {
+        const L = .022 + a * .016, x2 = p.x - p.vx * L, y2 = p.y - p.vy * L;   // risco na direção do voo (mais longo quando rápido)
+        const quente = a > .72 ? '255,246,200' : a > .45 ? '255,200,40' : a > .22 ? '255,120,20' : '210,55,15';
+        const borda = a > .45 ? '255,140,20' : '170,40,10';                    // contorno alaranjado: aparece também de dia no fundo claro
+        ctx.save(); ctx.lineCap = 'round';
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(${quente},${.25 * a + .05})`; ctx.lineWidth = p.w * 4; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(x2, y2); ctx.stroke();   // brilho
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = `rgba(${borda},${.7 * Math.min(1, a * 1.6)})`; ctx.lineWidth = p.w + 1.4; ctx.stroke();
+        ctx.strokeStyle = `rgba(${quente},${.6 + .4 * a})`; ctx.lineWidth = p.w; ctx.stroke();                                                       // miolo
+        ctx.restore();
+      }
       else if (p.type === 'ring') { ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * .45, 0, 0, TAU); ctx.stroke(); }
       else if (p.type === 'confetti') { ctx.save(); ctx.globalAlpha = Math.min(1, a * 2); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.r, -p.r * .4, p.r * 2, p.r * .8); ctx.restore(); }
       else if (p.type === 'hexshard') {
