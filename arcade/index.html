@@ -2859,6 +2859,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // versão "de fundo" de uma imagem (feita uma vez): menos saturada e levemente desfocada, para não competir com os obstáculos
   const mutedCache = new Map();
+  // faixa de teto da fábrica: os 240 px de cima da imagem, espelhados para cima e escurecendo até #1b1f2b (cache)
+  let fabTetoC = null;
+  function fabTeto() {
+    if (fabTetoC) return fabTetoC;
+    const src = bgSoft(TRECHO.fabrica, FAB_MUTE), bh = 240, c = document.createElement('canvas');
+    c.width = src.naturalWidth || src.width; c.height = bh;
+    const g = c.getContext('2d'); g.translate(0, bh); g.scale(1, -1); g.drawImage(src, 0, 0, c.width, bh, 0, 0, c.width, bh);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const gr = g.createLinearGradient(0, 0, 0, bh); gr.addColorStop(0, 'rgba(27,31,43,1)'); gr.addColorStop(.75, 'rgba(27,31,43,.35)'); gr.addColorStop(1, 'rgba(27,31,43,.1)');
+    g.fillStyle = gr; g.fillRect(0, 0, c.width, bh);
+    return fabTetoC = Object.assign(c, { src: 'fab-teto', naturalWidth: c.width, naturalHeight: bh, complete: true });
+  }
   function bgSoft(im, f) {
     if (!ok(im)) return im;
     const id = im.src + '#mute' + f;
@@ -3034,7 +3046,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (bw.fabrica > .01 && ok(TRECHO.fabrica)) {
       ctx.save(); ctx.globalAlpha = bw.fabrica;
       ctx.fillStyle = '#26282d'; ctx.fillRect(0, 0, W, 8);                 // galpão ocupa a tela toda (teto em arco no alto)
-      nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .38, 2, GROUND - 2, false); nightFilter(.55);
+      nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .38, 2, GROUND - 2, false);
+      // acima do galpão (câmera descendo nos pulos): continua o teto (topo espelhado, escurecendo) em vez de mostrar o céu
+      if (camY > 0) {
+        const teto = fabTeto(), th = (GROUND - 2) * teto.naturalHeight / TRECHO.fabrica.naturalHeight;
+        strip(teto, .38, 2 - th, th + 1, false);
+        if (camY > th) { ctx.fillStyle = '#1b1f2b'; ctx.fillRect(0, -camY - 4, W, camY - th + 6); }
+      }
+      nightFilter(.55);
       ctx.fillStyle = 'rgba(46,40,36,.24)'; ctx.fillRect(0, 0, W, GROUND);     // galpão um pouco mais escuro: obstáculos na frente se destacam
       ctx.restore();
     }
@@ -4098,9 +4117,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (state === 'over') {
       const k = easeOut(mt / .5);
       ctx.fillStyle = `rgba(2,10,7,${.62 * k})`; ctx.fillRect(0, -menuOY, W, H);
-      const ox = W / 2, oy = 34 - (1 - k) * 40;
+      const ox = W / 2, oy = 22 - (1 - k) * 40;   // layout com folga: faixa 22, pontos 150, quadros 166–218, continuar 248, botões 306
       if (newBest) {                                       // raios dourados girando atrás da pontuação
-        ctx.save(); ctx.translate(ox, 136); ctx.rotate(t * .4); ctx.globalAlpha = .22 * k;
+        ctx.save(); ctx.translate(ox, 124); ctx.rotate(t * .4); ctx.globalAlpha = .22 * k;
         for (let i = 0; i < 14; i++) { ctx.rotate(TAU / 14); ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-22, -190); ctx.lineTo(22, -190); ctx.fill(); }
         ctx.restore();
       }
@@ -4108,11 +4127,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       newBest ? ribbon(ox, oy, 280, 'NOVO RECORDE!', '#ffd23a', '#d48a00') : ribbon(ox, oy, 250, 'FIM DE JOGO', '#ff5a4f', '#b3201b');
       const shown = Math.round(score * easeOut((mt - .25) / .9));
       ctx.font = `14px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = 'rgba(234,245,233,.7)';
-      ctx.fillText('PONTOS', ox, 112);
-      text3d(String(shown).padStart(5, '0'), ox, 168, 62, '#ffffff', newBest ? '#ffe066' : '#e6f3e2', '#063d27', 6);
-      statChip(ox - 160, 186, 140, 'RECORDE', String(best).padStart(5, '0'), '#ffd23a', '🏆');
-      statChip(ox, 186, 140, 'TAMPINHAS', caps, '#ffd84a', 'cap');
-      statChip(ox + 160, 186, 140, 'DISTÂNCIA', Math.floor(dist / 50) + ' m', '#7fd0ff');
+      ctx.fillText('PONTOS', ox, 96);
+      text3d(String(shown).padStart(5, '0'), ox, 150, 56, '#ffffff', newBest ? '#ffe066' : '#e6f3e2', '#063d27', 6);
+      statChip(ox - 160, 166, 140, 'RECORDE', String(best).padStart(5, '0'), '#ffd23a', '🏆');
+      statChip(ox, 166, 140, 'TAMPINHAS', caps, '#ffd84a', 'cap');
+      statChip(ox + 160, 166, 140, 'DISTÂNCIA', Math.floor(dist / 50) + ' m', '#7fd0ff');
       if (false) {                                          // (antigo) com acessório usava a folha a pé; agora as poses especiais têm o acessório
         const pk = easeOut((mt - .1) / .5), fr = newBest ? 22 : 19, z = .95 * pk, sh = tinted(accSheet(), skinKey());
         ctx.drawImage(sh, (fr % 8) * 256, Math.floor(fr / 8) * 256, 256, 256, 135 - 128 * z, GROUND + 6 - menuOY - 246 * z, 256 * z, 256 * z);
@@ -4123,12 +4142,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       }
       if (player.deadT > 1.1) {
         // continuar gastando tampinhas (1 vez por partida); sem saldo, o botão mostra quanto falta
-        if (!continued) gameButton('cont', ox, 254, 300, 44, loja.carteira >= CONT_PRECO ? `▶  CONTINUAR  ·  ${CONT_PRECO} TAMPINHAS` : `CONTINUAR: FALTAM ${CONT_PRECO - loja.carteira} TAMPINHAS`, loja.carteira >= CONT_PRECO ? 'yellow' : 'ghost', loja.carteira >= CONT_PRECO);
-        gameButton('again', ox - 150, 308, 230, 50, '↻  JOGAR DE NOVO', continued || loja.carteira < CONT_PRECO ? 'yellow' : 'ghost', continued || loja.carteira < CONT_PRECO);
-        gameButton('menu', ox + 30, 308, 110, 44, 'MENU', 'ghost');
-        gameButton('share', ox + 190, 308, 190, 44, '📤 COMPARTILHAR', 'ghost');
+        if (!continued) gameButton('cont', ox, 248, 300, 42, loja.carteira >= CONT_PRECO ? `▶  CONTINUAR  ·  ${CONT_PRECO} TAMPINHAS` : `CONTINUAR: FALTAM ${CONT_PRECO - loja.carteira} TAMPINHAS`, loja.carteira >= CONT_PRECO ? 'yellow' : 'ghost', loja.carteira >= CONT_PRECO);
+        gameButton('again', ox - 150, 306, 230, 46, '↻  JOGAR DE NOVO', continued || loja.carteira < CONT_PRECO ? 'yellow' : 'ghost', continued || loja.carteira < CONT_PRECO);
+        gameButton('menu', ox + 30, 306, 110, 44, 'MENU', 'ghost');
+        gameButton('share', ox + 190, 306, 190, 44, '📤 COMPARTILHAR', 'ghost');
         if (RANK_ON && score > 0) {
-          if (!rankSent) gameButton('send', ox + 395, 308, 200, 44, '🏆 ENVIAR RANKING', 'ghost');
+          if (!rankSent) gameButton('send', ox + 395, 306, 200, 44, '🏆 ENVIAR RANKING', 'ghost');
           else {
             ctx.font = `16px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillStyle = rankSent.ok ? '#9bcb45' : rankSent.wait ? '#eaf5e9' : '#ff8a7a';
