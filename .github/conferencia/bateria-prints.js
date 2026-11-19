@@ -8,7 +8,7 @@ const { chromium } = require(process.argv[2]); const out = process.argv[4]; cons
   const b = await chromium.launch({ executablePath: process.argv[3] });
   const c = await b.newContext({ viewport: { width: 960, height: 360 }, deviceScaleFactor: 1 });
   await c.addInitScript(() => { localStorage.setItem('jabotiRunTutorial', '1');
-    localStorage.setItem('jabotiRunLoja', JSON.stringify({ carteira: 900, tem: ['skate', 'patinete', 'bone', 'chapeu', 'pt_neon'], cor: 'classico', acc: '', loc: 'pe', patinete: 'pt_classico', rastro: '' })); });
+    localStorage.setItem('jabotiRunLoja', JSON.stringify({ carteira: 900, tem: ['skate', 'bone', 'chapeu', 'sh_neon'], cor: 'classico', acc: '', loc: 'pe', rastro: '' })); });
   const pedidas = new Set(); c.on('request', r => { const m = r.url().match(/\/arcade\/(assets\/[^?]+)/); if (m) pedidas.add(decodeURIComponent(m[1])); });
   const p = await c.newPage(); const erros = [];
   p.on('pageerror', e => erros.push(e.message)); p.on('console', m => { if (m.type() === 'error') erros.push(m.text()); });
@@ -25,10 +25,10 @@ const { chromium } = require(process.argv[2]); const out = process.argv[4]; cons
   const TRECHOS = [['campo', 6000], ['athenas', 26000], ['cidade', 46000], ['fabrica', 66000]];
   for (const [n, d] of TRECHOS) for (const [h, ciclo] of [['dia', .15], ['noite', .66]]) { await correr({ d, ciclo }); await shot(`${n}-${h}`); }
   // ---- veículos e acessórios ----
-  for (const o of [{ n: 'skate-cidade', loc: 'skate', d: 46000, ciclo: .2 }, { n: 'patinete-fabrica-noite', loc: 'patinete', d: 66000, ciclo: .66 },
-    { n: 'chapeu-patinete', loc: 'patinete', acc: 'chapeu', d: 26000, ciclo: .25 }, { n: 'bone-ape', acc: 'bone', d: 6000, ciclo: .1 }]) { await correr(o); await shot(o.n); }
+  for (const o of [{ n: 'skate-cidade', loc: 'skate', d: 46000, ciclo: .2 }, { n: 'skate-fabrica-noite', loc: 'skate', d: 66000, ciclo: .66 },
+    { n: 'chapeu-skate', loc: 'skate', acc: 'chapeu', d: 26000, ciclo: .25 }, { n: 'bone-ape', acc: 'bone', d: 6000, ciclo: .1 }]) { await correr(o); await shot(o.n); }
   // ---- pulo alto com 4 poderes (câmera desce; ícones e barrinhas em cima da cabeça) ----
-  for (const o of [{ n: 'pulo-poderes-fabrica', d: 66000, ciclo: .15 }, { n: 'pulo-poderes-patinete-noite', loc: 'patinete', d: 46000, ciclo: .66 }]) {
+  for (const o of [{ n: 'pulo-poderes-fabrica', d: 66000, ciclo: .15 }, { n: 'pulo-poderes-skate-noite', loc: 'skate', d: 46000, ciclo: .66 }]) {
     await correr(o);
     const pod = () => p.evaluate(() => { __g.obstacles.length = 0; ['turbo', 'escudo', 'ima', 'pulo'].forEach(k => __g.skills[k] = 9); });
     await pod(); await p.waitForTimeout(500); await pod();
@@ -62,7 +62,7 @@ const { chromium } = require(process.argv[2]); const out = process.argv[4]; cons
   await menu('missoes', () => __g.setState('goals'), 700);
   await menu('ajustes', () => __g.setState('ajustes'), 700);
   // passa por todos os acessórios × veículos para pedir todas as imagens que o jogo usa (aviso de imagem sem uso)
-  for (const acc of ['', 'bone', 'chapeu', 'coroa']) for (const loc of ['pe', 'skate', 'patinete']) {
+  for (const acc of ['', 'bone', 'chapeu', 'coroa']) for (const loc of ['pe', 'skate']) {
     await p.evaluate(([a, l]) => { window.__nodie = true; __g.setAcc(a); __g.setLoc(l); __g.start(); __g.setDist(66000); __g.activate('lata', 300, 200); __g.activate('escudo', 300, 200); }, [acc, loc]); await p.waitForTimeout(450);
   }
   await p.waitForTimeout(1500);

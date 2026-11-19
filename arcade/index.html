@@ -228,7 +228,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // versão das imagens (ferramentas/versao-assets.py grava aqui um resumo do conteúdo de assets/ antes de publicar):
   // cada imagem pedida como assets/... vira assets/...?v=<versão>, então depois de publicar o navegador nunca mistura
   // código novo com imagem antiga guardada (o GitHub Pages manda guardar por 10 min). No app as imagens vêm de dentro do APK.
-  const ASSET_V = '217c061cec';
+  const ASSET_V = 'b0b0b14bf2';
   if (ASSET_V !== 'dev' && /^https?:$/.test(location.protocol) && location.hostname !== 'appassets.androidplatform.net') {
     const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get() { return d.get.call(this); },
@@ -900,17 +900,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     kickflip: { turns: 0, screw: 0, dur: .44, label: 'KICKFLIP!', color: '#ffd84a', sk: 6, kick: 1 },
     grab:     { turns: 0, screw: 0, dur: .46, label: 'GRAB!', color: '#7fd0ff', sk: 5 },
     treflip:  { turns: 0, screw: 0, dur: .54, label: '360 FLIP!', color: '#9bcb45', sk: 6, kick: 1, shove: 1 },
-    duplosk:  { turns: 0, screw: 0, dur: .66, label: '360 FLIP DUPLO!', color: '#ff6a5f', sk: 6, kick: 2, shove: 2 },
-    // de patinete (pose do atlas do patinete em sc; whip = voltas da base em volta da haste)
-    superman: { turns: 0, screw: 0, dur: .56, label: 'SUPERMAN!', color: '#7fd0ff', sc: 2 },
-    tailwhip: { turns: 0, screw: 0, dur: .5, label: 'TAILWHIP!', color: '#ffd84a', sc: 3, whip: 1 },
-    nohander: { turns: 0, screw: 0, dur: .5, label: 'NO HANDER!', color: '#9bcb45', sc: 4 },
-    tailwhip2: { turns: 0, screw: 0, dur: .66, label: 'TAILWHIP DUPLO!', color: '#ff6a5f', sc: 3, whip: 2 }
+    duplosk:  { turns: 0, screw: 0, dur: .66, label: '360 FLIP DUPLO!', color: '#ff6a5f', sk: 6, kick: 2, shove: 2 }
   };
   let lastTrick = '';
   function pickTrick() {
-    if (player.jumps >= 3) return scooterOn() ? 'tailwhip2' : skateOn() ? 'duplosk' : 'duplo';
-    const opts = (scooterOn() ? ['superman', 'tailwhip', 'nohander'] : skateOn() ? ['kickflip', 'grab', 'treflip'] : ['mortal', 'reverso', 'parafuso']).filter(k => k !== lastTrick);
+    if (player.jumps >= 3) return skateOn() ? 'duplosk' : 'duplo';
+    const opts = (skateOn() ? ['kickflip', 'grab', 'treflip'] : ['mortal', 'reverso', 'parafuso']).filter(k => k !== lastTrick);
     return (lastTrick = pick(opts));
   }
   // poses das manobras (Gemini): 0 entrando, 1 e 2 encolhido como bola, 3 abrindo, 4 parafuso de braços cruzados;
@@ -952,22 +947,15 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // grind no corrimão (só de skate): cai em cima dele vindo de um pulo
   const GRINDS = [
     // poses próprias (Gemini 9H–9J e 9L, células 7–10); tilt = ângulo do skate medido na imagem (gira no truck que raspa)
-    { label: '50-50!', f: 7, dy: 13, color: '#ffd84a' },
-    { label: 'NOSEGRIND!', f: 8, dy: 13, tilt: .336, color: '#7fd0ff' },
-    { label: '5-0 GRIND!', f: 9, dy: 13, tilt: -.384, color: '#9bcb45' },
-    { label: 'CROOKED!', f: 10, dy: 13, tilt: .336, color: '#f08a1c' }
-  ];
-  // de patinete a base raspa no corrimão: feeble (traseira) e smith (frente) inclinam na ponta da base
-  const GRINDS_SC = [
-    { label: '50-50!', f: 0, dy: 14, color: '#ffd84a' },
-    { label: 'FEEBLE!', f: 0, dy: 14, tilt: -.2, color: '#7fd0ff' },
-    { label: 'SMITH!', f: 0, dy: 14, tilt: .2, color: '#f08a1c' },
-    { label: 'ICEPICK!', f: 4, dy: 14, tilt: -.12, color: '#9bcb45' }
+    { label: '50-50!', f: 7, dy: 4, color: '#ffd84a' },
+    { label: 'NOSEGRIND!', f: 8, dy: 4, tilt: .336, color: '#7fd0ff' },
+    { label: '5-0 GRIND!', f: 9, dy: 4, tilt: -.384, color: '#9bcb45' },
+    { label: 'CROOKED!', f: 10, dy: 4, tilt: .336, color: '#f08a1c' }
   ];
   let lastGrind = null;
   const GRIND_TRUCK = 88;                                                    // distância do truck ao meio do skate (px do atlas)
   // x na tela do ponto que raspa no corrimão (truck da frente, de trás ou o meio)
-  const grindX = () => { const g = player.grind && player.grind.g; return PX + (g && g.tilt ? Math.sign(g.tilt) * (scooterOn() ? 62 : GRIND_TRUCK) * SP.scale * Math.cos(player.grind.slope) : 0); };
+  const grindX = () => { const g = player.grind && player.grind.g; return PX + (g && g.tilt ? Math.sign(g.tilt) * GRIND_TRUCK * SP.scale * Math.cos(player.grind.slope) : 0); };
   // obstáculos de skate onde dá para andar em cima: rampa (curva que sobe) e escadaria (degraus + patamar)
   function surfaceAt(o, x) {
     const u = x - o.x;
@@ -997,7 +985,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     return -1;
   }
   function startGrind(o) {
-    const g = pick((scooterOn() ? GRINDS_SC : GRINDS).filter(x => x !== lastGrind)); lastGrind = g;
+    const g = pick(GRINDS.filter(x => x !== lastGrind)); lastGrind = g;
     const slope = o.kind === 'stairs' ? Math.atan2(o.h, o.down) : 0;
     player.grind = { o, g, t: 0, slope }; player.ground = false; player.spin = -1; player.trail = []; player.vy = 0; player.y = railTop(o, PX) - g.dy; player.jumps = 0; player.land = .6;
     popText(PX + 70, GROUND - player.y - 130, g.label, g.color); sfx.grind(); grindSparks(grindX(), GROUND - railTop(o, grindX()) + 1, 26, 1.3);
@@ -1030,7 +1018,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     state = 'dying'; hitstop = .12; shake = 14;
     comboEnd(false); player.grind = null; player.slope = 0; player.stairDrop = 0; player.vy = 640; player.ground = false; player.deadT = 0; player.landedDead = false; player.spin = -1;
     sparkle(PX + 20, GROUND - player.y - 50, 14, '#ffffff'); sfx.hit(); skills = {};
-    if (wheels()) boardFly = { x: PX, y: GROUND - player.y - 8, vx: 260, vy: -520, r: 0, vr: 9, scooter: scooterOn() };
+    if (wheels()) boardFly = { x: PX, y: GROUND - player.y - 8, vx: 260, vy: -520, r: 0, vr: 9 };
     loja.carteira += caps - capsBanked; capsBanked = caps; salvarLoja();     // tampinhas da partida vão para a carteira (sem contar 2× ao continuar)
     if (score > best) { best = score; newBest = true; try { localStorage.setItem('jabotiRunBest', String(best)); } catch (e) {} }
     vib(140);
@@ -1338,16 +1326,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { id: 'arcoiris', nome: 'ARCO-ÍRIS', preco: 700, fx: 'arcoiris' }
   ];
   // locomoção (a pé ou de skate), estampas do skate e rastros atrás do mascote
-  const LOCS = [{ id: 'pe', nome: 'A PÉ', preco: 0 }, { id: 'skate', nome: 'SKATE', preco: 400 }, { id: 'patinete', nome: 'PATINETE', preco: 450 }];   // BMX saiu da loja em 2026-11-19 (código dela ficou parado: bmxOn() nunca liga)
-  // cores do patinete (recolore as peças 3D: vermelho → base, faixa amarela → faixa; ver scootImg)
-  const PATINETES = [
-    { id: 'pt_classico', nome: 'CLÁSSICO', preco: 0, base: '#d7262b', stripe: '#f5c31a' },
-    { id: 'pt_azul', nome: 'AZUL', preco: 150, base: '#2b6fe0', stripe: '#ffffff' },
-    { id: 'pt_jaboti', nome: 'JABOTI', preco: 200, base: '#23a04f', stripe: '#ffd23a' },
-    { id: 'pt_preto', nome: 'PRETO', preco: 250, base: '#26262c', stripe: '#ff7a1a' },
-    { id: 'pt_neon', nome: 'NEON', preco: 300, base: '#ff3fa4', stripe: '#33e6ff' },
-    { id: 'pt_ouro', nome: 'OURO', preco: 600, base: '#d4a017', stripe: '#fff1a8' }
-  ];
+  const LOCS = [{ id: 'pe', nome: 'A PÉ', preco: 0 }, { id: 'skate', nome: 'SKATE', preco: 400 }, ];   // BMX saiu da loja em 2026-11-19 (código dela ficou parado: bmxOn() nunca liga)
   const SHAPES = [
     { id: 'sh_classico', nome: 'CLÁSSICO', preco: 0, base: '#cf2329', stripe: '#f5c31a' },
     { id: 'sh_jaboti', nome: 'JABOTI', preco: 200, base: '#d7262b', stripe: '#ffd23a', pat: 'jaboti' },
@@ -1369,7 +1348,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { id: 'coroa', nome: 'COROA', preco: 500 }
   ];
   // ACESSÓRIOS 3D (2026-11-19): peças soltas desenhadas por cima da fruta em TODAS as folhas (a pé, mortal, deslize,
-  // poses, skate, patinete e BMX). ACC_ANCH = por folha e célula: [cx, cy, r da fruta, olhos x, y, ângulo, distância]
+  // poses e skate). ACC_ANCH = por folha e célula: [cx, cy, r da fruta, olhos x, y, ângulo, distância]
   // (medido por ferramentas/ancoras-acessorios.py). Peças em r: w = largura; ax/ay = deslocamento; modo de encaixe.
   const ACC_PECAS = {
     bone:     { w: 2.1, ax: -.06, ay: -.47, modo: 'base' },
@@ -1386,9 +1365,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (!f[nome]) { f[nome] = new Image(); f[nome].src = `assets/acessorios/${id}/mascote${nome === 'base' ? '' : '-' + nome}.webp`; }
     return ok(f[nome]) ? f[nome] : null;
   }
-  const ACC_FOLHA = { base: 'base', slide: 'desliza', mortal: 'mortal', poses: 'poses', skate: 'skate', patinete: 'patinete', bmx: 'bmx' };
+  const ACC_FOLHA = { base: 'base', slide: 'desliza', mortal: 'mortal', poses: 'poses', skate: 'skate' };
   const ACC_IMG = {}; Object.keys(ACC_PECAS).forEach(p => { const i = new Image(); i.src = 'assets/acessorios/3d-' + p + '.webp'; ACC_IMG[p] = i; });
-  const ACC_ANCH = {base:{0:[140.4,110.8,56.5,165.3,86.1,0.009,25.3],1:[141.1,111.3,56.5,165.3,86.2,-0.037,25.0],2:[139.9,110.8,56.6,162.1,81.7,-0.095,24.9],3:[140.5,109.3,57.3,164.8,80.4,-0.105,24.3],4:[141.2,111.1,56.4,166.1,85.3,-0.012,24.4],5:[140.1,110.5,56.8,162.4,82.7,-0.139,25.5],11:[140.2,104.3,56.5,162.8,75.2,0.002,25.2],12:[136.0,111.5,56.3,157.7,84.6,-0.007,26.1],13:[145.4,110.6,56.3,167.5,82.4,-0.044,25.7],14:[140.8,138.3,56.9,167.8,113.8,-0.019,24.3],19:[140.2,114.4,56.7,157.2,103.1,0,28.3],20:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],21:[140.8,124.6,56.4,164.4,97.1,0.103,26.1],22:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],23:[140.8,124.6,56.5,164.4,97.1,0.105,26.0]},slide:{0:[103.0,90.2,54.7,121.9,61.7,-0.227,25.3]},mortal:{0:[209.1,210.5,69.1,221.9,192.8,-1.424,39.4],1:[210.6,211.8,68.7,215.0,214.4,0,34.3],2:[209.6,210.4,69.3,234.4,174.3,-0.104,30.7],3:[211.0,210.5,68.9,241.4,179.5,-0.021,30.7],4:[209.7,180.7,69.3,230.5,166.8,0,34.7]},poses:{0:[210.2,267.4,65.8,249.1,266.1,1.009,9.1],1:[210.3,250.7,65.2,232.9,219.6,-0.055,32.2],2:[210.2,273.9,65.1,229.7,260.8,0,32.6],3:[210.1,269.9,64.7,196.9,254.2,0.397,70.9]},skate:{0:[199.4,223.1,55.8,227.6,203.0,0.025,24.5],1:[199.2,220.5,56.4,229.3,202.3,0.002,24.6],2:[199.3,217.1,56.2,228.2,197.4,0.014,24.7],3:[198.9,261.7,56.8,210.2,246.5,0,28.4],4:[200.0,215.0,57.0,225.7,193.5,-0.086,25.4],5:[199.6,225.8,56.8,208.8,205.8,0,28.4],6:[198.7,210.8,56.1,229.0,193.4,-0.171,23.2],7:[199.7,217.5,57.0,230.6,201.2,-0.116,23.7],8:[199.7,236.8,56.1,218.4,216.6,0,28.0],9:[199.5,229.3,54.7,190.6,215.5,0.096,62.4],10:[200.9,242.6,57.6,196.9,225.9,-0.164,76.9]},patinete:{0:[198.7,221.1,57.0,222.2,197.1,-0.139,26.3],1:[200.1,213.2,56.7,223.0,187.9,-0.164,25.8],2:[198.4,212.4,56.8,222.9,188.5,-0.194,25.6],3:[198.3,214.1,56.9,225.0,190.8,-0.161,24.5],4:[199.6,214.2,56.7,221.1,190.6,-0.176,27.8]},bmx:{0:[198.1,170.0,57.0,225.1,145.9,-0.15,23.7],1:[199.8,156.3,57.0,224.6,133.8,-0.006,25.6],2:[198.3,156.8,56.3,224.9,134.1,-0.16,24.3],3:[200.4,156.8,57.2,227.3,132.3,-0.147,23.7],4:[199.5,124.8,57.4,224.4,105.5,-0.046,28.1],5:[199.2,133.4,55.3,225.2,112.3,-0.118,24.5]}};
+  const ACC_ANCH = {base:{0:[140.4,110.8,56.5,165.3,86.1,0.009,25.3],1:[141.1,111.3,56.5,165.3,86.2,-0.037,25.0],2:[139.9,110.8,56.6,162.1,81.7,-0.095,24.9],3:[140.5,109.3,57.3,164.8,80.4,-0.105,24.3],4:[141.2,111.1,56.4,166.1,85.3,-0.012,24.4],5:[140.1,110.5,56.8,162.4,82.7,-0.139,25.5],11:[140.2,104.3,56.5,162.8,75.2,0.002,25.2],12:[136.0,111.5,56.3,157.7,84.6,-0.007,26.1],13:[145.4,110.6,56.3,167.5,82.4,-0.044,25.7],14:[140.8,138.3,56.9,167.8,113.8,-0.019,24.3],19:[140.2,114.4,56.7,157.2,103.1,0,28.3],20:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],21:[140.8,124.6,56.4,164.4,97.1,0.103,26.1],22:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],23:[140.8,124.6,56.5,164.4,97.1,0.105,26.0]},slide:{0:[103.0,90.2,54.7,121.9,61.7,-0.227,25.3]},mortal:{0:[209.1,210.5,69.1,221.9,192.8,-1.424,39.4],1:[210.6,211.8,68.7,215.0,214.4,0,34.3],2:[209.6,210.4,69.3,234.4,174.3,-0.104,30.7],3:[211.0,210.5,68.9,241.4,179.5,-0.021,30.7],4:[209.7,180.7,69.3,230.5,166.8,0,34.7]},poses:{0:[210.2,267.4,65.8,249.1,266.1,1.009,9.1],1:[210.3,250.7,65.2,232.9,219.6,-0.055,32.2],2:[210.2,273.9,65.1,229.7,260.8,0,32.6],3:[210.1,269.9,64.7,196.9,254.2,0.397,70.9]},skate:{0:[199.4,223.1,55.8,227.6,203.0,0.025,24.5],1:[199.2,220.5,56.4,229.3,202.3,0.002,24.6],2:[199.3,217.1,56.2,228.2,197.4,0.014,24.7],3:[198.9,261.7,56.8,210.2,246.5,0,28.4],4:[200.0,215.0,57.0,225.7,193.5,-0.086,25.4],5:[199.6,225.8,56.8,208.8,205.8,0,28.4],6:[198.7,210.8,56.1,229.0,193.4,-0.171,23.2],7:[199.7,217.5,57.0,230.6,201.2,-0.116,23.7],8:[199.7,236.8,56.1,218.4,216.6,0,28.0],9:[199.5,229.3,54.7,190.6,215.5,0.096,62.4],10:[200.9,242.6,57.6,196.9,225.9,-0.164,76.9]}};
   // desenha o acessório da loja (ou `id`) para a célula `i` da folha `folha`, cuja célula está desenhada em (dx, dy) com escala z.
   // atras = true: peças que ficam atrás do corpo (capa, headset); chamar antes e depois do drawImage do mascote.
   function accOverlay(folha, i, dx, dy, z, atras, id = loja.acc, c = ctx) {
@@ -1418,18 +1397,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const ACC_SHEET = {}, ACC_SLIDE = {}, ACC_MORTAL = {};
   ACCS.forEach(a => { if (!a.id) return;
     /* folhas antigas (2D) com o acessório desenhado não são mais carregadas: o acessório 3D vai por cima (accOverlay) */ });
-  let loja = { carteira: 0, tem: ['classico', ''], cor: 'classico', acc: '', loc: 'pe', shape: 'sh_classico', patinete: 'pt_classico', rastro: '' };
+  let loja = { carteira: 0, tem: ['classico', ''], cor: 'classico', acc: '', loc: 'pe', shape: 'sh_classico', rastro: '' };
   try { loja = Object.assign(loja, JSON.parse(localStorage.getItem('jabotiRunLoja') || '{}')); } catch (e) {}
   // óculos e headset saíram da loja (2026-11-19, o usuário não gostou): quem comprou recebe as tampinhas de volta e o item é desequipado
   // BMX saiu da loja (2026-11-19): mesma coisa, devolve as 600 tampinhas e volta a pé
-  { const REMOVIDOS = { oculos: 300, headset: 350, bmx: 600 }; let mudou = false;
+  // patinete e as cores dele saíram da loja em 2026-11-19 (fica só o skate): mesma devolução
+  { const REMOVIDOS = { oculos: 300, headset: 350, bmx: 600, patinete: 450, pt_azul: 150, pt_jaboti: 200, pt_preto: 250, pt_neon: 300, pt_ouro: 600 }; let mudou = false;
     Object.entries(REMOVIDOS).forEach(([id, preco]) => { if (loja.tem.includes(id)) { loja.tem = loja.tem.filter(x => x !== id); loja.carteira += preco; mudou = true; } if (loja.acc === id) { loja.acc = ''; mudou = true; } if (loja.loc === id) { loja.loc = 'pe'; mudou = true; } });
     if (mudou) try { localStorage.setItem('jabotiRunLoja', JSON.stringify(loja)); } catch (e) {} }
   if (loja.acc === 'skate') { loja.acc = ''; loja.loc = 'skate'; }          // antes o skate era um "acessório"
   if (!ACCS.some(a => a.id === loja.acc)) loja.acc = '';                     // acessório antigo que saiu da loja
   if (!LOCS.some(a => a.id === loja.loc)) loja.loc = 'pe';
   if (!SHAPES.some(a => a.id === loja.shape)) loja.shape = 'sh_classico';
-  if (!PATINETES.some(a => a.id === loja.patinete)) loja.patinete = 'pt_classico';
   if (!TRAILS.some(a => a.id === loja.rastro)) loja.rastro = '';
   if (!SKINS.some(a => a.id === loja.cor)) loja.cor = 'classico';
   const salvarLoja = () => { try { localStorage.setItem('jabotiRunLoja', JSON.stringify(loja)); } catch (e) {} };
@@ -1488,7 +1467,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // ---- missões do dia: 3 por dia, sorteadas pela data (iguais o dia todo), prêmio em tampinhas ----
   const hoje = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
-  const temVeiculo = () => loja.tem.some(x => x === 'skate' || x === 'patinete');
+  const temVeiculo = () => loja.tem.includes('skate');
   const MISSOES = [
     { id: 'caps', txt: n => `Pegue ${n} tampinhas`, alvos: [30, 50, 80], premios: [30, 50, 80], soma: true },
     { id: 'manobras', txt: n => `Faça ${n} manobras no ar`, alvos: [3, 6, 10], premios: [30, 50, 70], soma: true },
@@ -1497,7 +1476,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { id: 'garrafas', txt: n => `Beba ${n} garrafas de poder`, alvos: [3, 5, 8], premios: [30, 50, 80], soma: true },
     { id: 'deslizes', txt: n => `Deslize ${n} vezes`, alvos: [10, 20, 30], premios: [20, 40, 60], soma: true },
     { id: 'combo', txt: n => `Faça um combo x${n}`, alvos: [2, 3, 4], premios: [40, 60, 90] },
-    { id: 'veiculo', txt: n => `Ande ${n} m de skate ou patinete`, alvos: [300, 500, 800], premios: [40, 60, 90], soma: true, precisa: temVeiculo },
+    { id: 'veiculo', txt: n => `Ande ${n} m de skate`, alvos: [300, 500, 800], premios: [40, 60, 90], soma: true, precisa: temVeiculo },
     { id: 'partidas', txt: n => `Jogue ${n} partidas`, alvos: [3, 5, 8], premios: [20, 40, 60], soma: true }
   ];
   let missoes = null;
@@ -1770,8 +1749,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const SKATE_SHAPE = new Image(); SKATE_SHAPE.src = 'assets/skate-shape.webp';   // skate de lado 3D (ChatGPT, ferramentas/montar-pecas-veiculos.py)
   // peças 3D dos veículos (folha do ChatGPT recortada por ferramentas/montar-pecas-veiculos.py); o código encaixa e gira cada uma
   const VEI = {};
-  ['patinete-base', 'patinete-haste', 'patinete-guidao', 'patinete-roda',
-    'skate-baixo', 'skate-rodinha'].forEach(n => { const im = new Image(); im.src = `assets/veiculos/${n}.webp`; VEI[n] = im; });
+  ['skate-baixo', 'skate-rodinha'].forEach(n => { const im = new Image(); im.src = `assets/veiculos/${n}.webp`; VEI[n] = im; });
   // desenha a peça img ligando o segmento A→B da imagem (px) ao segmento a→b do veículo (unidades, y para cima); P(x, y) = projeção na tela.
   // wf = escala na largura (perpendicular a A→B); src = [x, y, w, h] só um pedaço; clip = { pts: [[x, y]...] na imagem, out: fora }
   // devolve a função que leva um ponto da imagem para o veículo (unidades)
@@ -1789,52 +1767,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (src) ctx.drawImage(img, src[0], src[1], src[2], src[3], src[0], src[1], src[2], src[3]); else ctx.drawImage(img, 0, 0);
     ctx.restore(); return toLocal;
   }
-  // peça do patinete na cor escolhida (vermelho → base, amarelo da faixa → faixa), feita uma vez por cor e guardada
-  let scootPrev = null;                                                     // cor mostrada no cartão da loja (senão a equipada)
-  const curScoot = () => PATINETES.find(p => p.id === (scootPrev || loja.patinete)) || PATINETES[0];
-  const scootCache = {};
-  function scootImg(nome) {
-    const img = VEI[nome], S = curScoot();
-    if (S.id === 'pt_classico' || !ok(img)) return img;
-    const key = nome + '|' + S.id; if (scootCache[key]) return scootCache[key];
-    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
-    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
-    const hsv = ([r, gg, b]) => { const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn; let h = 0;
-      if (d) h = mx === r ? ((gg - b) / d + 6) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; return [h * 60, mx ? d / mx : 0, mx / 255]; };
-    const rgb = (h, sa, v) => { const f = n => { const k = (n + h / 60) % 6; return 255 * (v - v * sa * Math.max(0, Math.min(k, 4 - k, 1))); }; return [f(5), f(3), f(1)]; };
-    const B = hsv(hex(S.base)), T = hsv(hex(S.stripe));
-    try {
-      const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
-      for (let i = 0; i < px.length; i += 4) {
-        if (!px[i + 3]) continue;
-        const [h, sa, v] = hsv([px[i], px[i + 1], px[i + 2]]);
-        let C = null;
-        if ((h < 18 || h > 340) && sa > .25) C = B;                         // vermelho (base, pescoço, para-lama, manoplas, abraçadeira)
-        else if (h >= 36 && h <= 62 && sa > .45 && v > .55) C = T;           // faixa amarela
-        if (!C) continue;
-        const nv = Math.min(1, v / .86 * C[2]), ns = Math.min(1, sa / .92 * C[1]);
-        const o = rgb(C[0], C[1] < .08 ? C[1] : ns, C[2] < .25 ? Math.min(1, C[2] + v * .35) : nv);   // cor escura (preto): sobe um pouco com o brilho
-        px[i] = o[0]; px[i + 1] = o[1]; px[i + 2] = o[2];
-      }
-      g.putImageData(d, 0, 0);
-    } catch (e) { return img; }
-    return (scootCache[key] = c);
-  }
   const SK = { size: 400, cx: 200, fy: 216, bot: 372, shape: { w: 262, h: 72, top: 19, edge: 34 },
     deck: [[195, 322, 0], [200, 322, 0], [205, 322, 0], [190, 322, 0], [222, 308, -.31], [195, 303, 0], [232, 342, 0],
       [208, 322, 0], [225, 322, 0], [196, 322, 0], [225, 322, 0]] };   // 7–10: grinds (50-50, nosegrind, 5-0, crooked)
   const skateOn = () => loja.loc === 'skate' && ok(SKATE_IMG) && ok(SKATE_SHAPE);
-  // patinete: atlas de 5 células de 400 px só com o mascote (0 andando, 1 empurrando, 2 superman, 3 tailwhip, 4 no-hander);
-  // o patinete é desenhado pelo código em 3D (drawScooter). deck = [x, y do topo da base, ângulo] e bar = guidão (entre as mãos), na célula
-  const SCOOT_IMG = new Image(); SCOOT_IMG.src = 'assets/mascote-patinete.webp';
-  const SC = { size: 400, cx: 200, bot: 353, bar: [75, 93],
-    // bar = centro do punho da FRENTE (a haste termina dentro dele); grip = [punho de trás, punho da frente]: a barra com as
-    // manoplas vai de um ao outro (2026-11-19: antes a haste passava ao lado do punho e a mão parecia fora do guidão)
-    poses: [{ deck: [184, 322, 0], bar: [273, 237], grip: [[232, 243], [273, 237]] }, { deck: [189, 322, 0], bar: [279, 226], grip: [[243, 235], [279, 226]] },
-      { deck: null, bar: [290, 228], grip: [[259, 243], [290, 228]] }, { deck: null, bar: [277, 226], grip: [[220, 236], [277, 226]] },
-      { deck: [204, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
-  const scooterOn = () => loja.loc === 'patinete' && ok(SCOOT_IMG);
-  const wheels = () => skateOn() || scooterOn();                 // sobre rodas: obstáculos, grind, rampas…
+  const wheels = () => skateOn();                 // sobre rodas: obstáculos, grind, rampas…
 
   // estampa do skate: a imagem de lado é recolorida (faixa vermelha → cor base, faixa amarela → cor da faixa)
   const curShape = () => SHAPES.find(x => x.id === loja.shape) || SHAPES[0];
@@ -1981,7 +1918,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const fl = wheels() && state === 'running' ? floorAt(PX) : 0;          // sombra em cima do patamar/rampa
     ctx.beginPath(); ctx.ellipse(ox, GROUND - fl + 3, (dead && player.landedDead ? 42 : 28) * sh, 5 * sh, 0, 0, TAU); ctx.fill();
 
-    if (scooterOn() && !dead) { drawScooterRider(ox, oy, tint); return; }
     if (skateOn() && !dead) { drawSkater(ox, oy, tint, X); return; }
     if (boardFly && dead) drawBoardFly();
     if (state === 'running' && player.ground && player.slide && ok(SLIDE_IMG)) {
@@ -2180,172 +2116,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       dust(ox - 92 * k, oy, 1, .5); if (Math.random() < .5) dust(ox + 80 * k, oy, 1, .5);
     }
   }
-  // ---------------- patinete desenhado em 3D ----------------
-  // coordenadas do patinete: x para frente, y para cima, z para perto da câmera (px da célula de 400, origem no topo da base)
-  const SCG = { half: 62, th: 9, w: 15, rear: -73, front: 86, ay: -12, r: 19, hx: 80, hy: 42, pitch: .3 };
-  let scootBar = null;                                                       // barra do guidão entre os punhos (desenhada depois do mascote)
-  function drawScooter(k, deck, bar, yaw = 0, spin = 0, grip = null) {
-    scootBar = null;
-    const [dcx, dcy, ang] = deck, ca = Math.cos(ang || 0), sa = Math.sin(ang || 0), cp = Math.cos(SCG.pitch), sp = Math.sin(SCG.pitch);
-    const cyw = Math.cos(yaw), syw = Math.sin(yaw);
-    const P = (x, y, z, rot) => {                                            // rot: parte que gira no tailwhip (base, pescoço, roda de trás)
-      if (rot) { const dx = x - SCG.hx; x = SCG.hx + dx * cyw + z * syw; z = -dx * syw + z * cyw; }
-      const Y = y * cp - z * sp, D = y * sp + z * cp, cxl = x, cyl = -Y;
-      return [((dcx + cxl * ca - cyl * sa) - SC.cx) * k, ((dcy + cxl * sa + cyl * ca) - SC.bot) * k, D];
-    };
-    const line = (pts, col, w, cap = 'round') => { ctx.lineCap = cap; ctx.lineJoin = 'round'; ctx.strokeStyle = col; ctx.lineWidth = w * k; ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); };
-    const poly = (pts, fill, stroke) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.3 * k; ctx.stroke(); } };
-    const wheel = (x, rot) => {
-      const [wx, wy] = P(x, SCG.ay, 0, rot), sq = rot ? Math.max(.22, Math.abs(cyw)) : 1, r = SCG.r * k;
-      const tg = ctx.createRadialGradient(wx - r * .35 * sq, wy - r * .4, r * .1, wx, wy, r);                                  // pneu de borracha com volume
-      tg.addColorStop(0, '#4a4a50'); tg.addColorStop(.6, '#1b1b1e'); tg.addColorStop(1, '#050506');
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * sq, r, 0, 0, TAU); ctx.fillStyle = tg; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
-      const rg = ctx.createRadialGradient(wx - r * .2 * sq, wy - r * .25, r * .05, wx, wy, r * .6);                             // miolo amarelo brilhante
-      rg.addColorStop(0, '#fff2a8'); rg.addColorStop(.45, '#f2c41f'); rg.addColorStop(1, '#a87d00');
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * .6 * sq, r * .6, 0, 0, TAU); ctx.fillStyle = rg; ctx.fill(); ctx.strokeStyle = '#7a5a00'; ctx.lineWidth = 1.2 * k; ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(wx, wy, r * .22 * sq, r * .22, 0, 0, TAU); ctx.fillStyle = '#d9dfe4'; ctx.fill(); ctx.strokeStyle = '#5e6870'; ctx.lineWidth = .8 * k; ctx.stroke();
-    };
-    // barra do guidão no espaço local (o ponto da célula vira x/y do patinete)
-    let bl;
-    if (bar) { const dx = bar[0] - dcx, dy = bar[1] - dcy; bl = [dx * ca + dy * sa, -(-dx * sa + dy * ca) / cp]; }
-    else bl = [SC.bar[0], SC.bar[1] / cp];
-    if (ok(VEI['patinete-base']) && ok(VEI['patinete-roda'])) {            // peças 3D (ChatGPT) encaixadas pelo código
-      const PR = (x, y) => P(x, y, 0, true), PN = (x, y) => P(x, y, 0, false);
-      const wheel3 = (x, rot) => {
-        const [wx, wy] = P(x, SCG.ay, 0, rot), sq = rot ? Math.max(.22, Math.abs(cyw)) : 1, r = SCG.r * k;
-        ctx.save(); ctx.translate(wx, wy); ctx.scale(sq, 1); ctx.rotate(spin); ctx.drawImage(VEI['patinete-roda'], -r, -r * 1.02, 2 * r, 2 * r * 1.02); ctx.restore();
-      };
-      wheel3(SCG.rear, true);
-      // haste: do eixo da frente até o guidão; garfo + abraçadeira (patinete-haste) embaixo, tubo do guidão em T por cima
-      const ax = [SCG.front, SCG.ay], dx = bl[0] - ax[0], dy = bl[1] - ax[1], len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
-      const HS = .72, cTop = 68 * HS, at = d => [ax[0] + ux * d, ax[1] + uy * d];
-      const tb = [bl[0] - ux * 123.5 * HS, bl[1] - uy * 123.5 * HS];                // ponta de baixo do guidão em T
-      const rows = clamp(11 + (len - cTop + 4) / HS, 22, 134);
-      piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, 1, [0, 22, 152, rows - 22]);                      // tubo do T
-      if (grip) {                                                             // barra com manoplas de um punho ao outro (mãos segurando)
-        const L = q => { const dx = q[0] - dcx, dy = q[1] - dcy; return [dx * ca + dy * sa, -(-dx * sa + dy * ca) / cp]; };
-        const g0 = L(grip[0]), g1 = L(grip[1]), gx = g1[0] - g0[0], gy = g1[1] - g0[1], gl = Math.hypot(gx, gy) || 1, ex = 7 / gl;
-        // guidão em T visto de 3/4: a haste sobe até o MEIO da barra (drawScooterPose manda bar = meio dos punhos) e cada punho
-        // segura uma manopla vermelha. Desenhado DEPOIS do mascote (scootBar); os punhos são redesenhados por cima (gripBar)
-        const s0 = PN(g0[0], g0[1]), s1 = PN(g1[0], g1[1]), vx = s1[0] - s0[0], vy = s1[1] - s0[1], vl = Math.hypot(vx, vy) || 1, ux2 = vx / vl, uy2 = vy / vl;
-        const at2 = (q, d) => [q[0] + ux2 * d * k, q[1] + uy2 * d * k], cor = curScoot().base;
-        scootBar = () => {
-          const ln = (a, b, col, w) => { ctx.lineCap = 'round'; ctx.strokeStyle = col; ctx.lineWidth = w * k; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
-          const up = (q, d) => [q[0], q[1] - d * k];
-          ln(s0, s1, '#3e464e', 7); ln(s0, s1, '#9aa3ab', 5); ln(up(s0, 1.3), up(s1, 1.3), '#eef2f5', 1.6);           // barra cromada
-          [s0, s1].forEach(q => {                                                                                   // manoplas (cor do patinete)
-            const e0 = at2(q, -14), e1 = at2(q, 14);
-            ln(e0, e1, 'rgba(0,0,0,.75)', 11); ln(e0, e1, cor, 8); ln(up(e0, 2), up(e1, 2), 'rgba(255,255,255,.5)', 2);
-          });
-          ctx.lineCap = 'butt';
-        };
-      } else piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, .42, [0, 0, 152, 22]);   // barra com manoplas (de lado)
-      wheel3(SCG.front, false);
-      piece(scootImg('patinete-haste'), PN, [16, 159], [16, 91], ax, at(cTop), .75, [0, 84, 30, 80]);   // só abraçadeira + garfo (o tubo é o do T)                                                    // garfo + abraçadeira
-      piece(scootImg('patinete-base'), PR, [13, 59], [14, 59], [SCG.rear, SCG.ay], [SCG.rear + .829, SCG.ay]);                          // base com pescoço e para-lama
-      ctx.lineCap = 'butt'; return;
-    }
-    const head = P(SCG.hx, SCG.hy, 0), hb = P(bl[0], bl[1], 0);
-    wheel(SCG.rear, true); wheel(SCG.front, false);
-    line([P(SCG.hx + 2, SCG.hy - 4, 0), P(SCG.front, SCG.ay, 0)], '#4e565e', 8); line([P(SCG.hx + 2, SCG.hy - 4, 0), P(SCG.front, SCG.ay, 0)], '#c9d0d6', 5);   // garfo
-    // base (caixa): faces viradas para a câmera
-    const X0 = -SCG.half, X1 = SCG.half, Y0 = -SCG.th, Y1 = 0, Z0 = -SCG.w, Z1 = SCG.w;
-    const faces = [
-      { n: [0, 1, 0], p: [[X0, Y1, Z0], [X1, Y1, Z0], [X1, Y1, Z1], [X0, Y1, Z1]], c: '#2b2b2e' },
-      { n: [0, -1, 0], p: [[X0, Y0, Z0], [X1, Y0, Z0], [X1, Y0, Z1], [X0, Y0, Z1]], c: '#a3151b' },
-      { n: [0, 0, 1], p: [[X0, Y0, Z1], [X1, Y0, Z1], [X1, Y1, Z1], [X0, Y1, Z1]], c: '#d7262b', side: Z1 },
-      { n: [0, 0, -1], p: [[X0, Y0, Z0], [X1, Y0, Z0], [X1, Y1, Z0], [X0, Y1, Z0]], c: '#d7262b', side: Z0 },
-      { n: [1, 0, 0], p: [[X1, Y0, Z0], [X1, Y0, Z1], [X1, Y1, Z1], [X1, Y1, Z0]], c: '#b81d22' },
-      { n: [-1, 0, 0], p: [[X0, Y0, Z0], [X0, Y0, Z1], [X0, Y1, Z1], [X0, Y1, Z0]], c: '#b81d22' }
-    ];
-    faces.forEach(F => {
-      const [nx, ny, nz] = F.n, nz2 = -nx * syw + nz * cyw;
-      if (ny * sp + nz2 * cp <= .002) return;
-      poly(F.p.map(q => P(q[0], q[1], q[2], true)), F.c, '#4a0d10');
-      if (F.side != null) poly([[-50, -6.5], [50, -6.5], [50, -3], [-50, -3]].map(([x, y]) => P(x, y, F.side, true)), '#f5c31a');   // faixa amarela
-    });
-    line([P(SCG.half - 6, -3, 0, true), P(SCG.hx, SCG.hy, 0, true)], '#5a0c10', 11); line([P(SCG.half - 6, -3, 0, true), P(SCG.hx, SCG.hy, 0, true)], '#e0373c', 8);   // pescoço vermelho
-    const fend = []; for (let i = 0; i <= 8; i++) { const a = .35 + i / 8 * 2.3; fend.push(P(SCG.rear + Math.cos(a) * 25, SCG.ay + Math.sin(a) * 25, 0, true)); }
-    line(fend, '#5a0c10', 7); line(fend, '#e0373c', 4.5);                     // para-lama de trás
-    const sx = p => [p[0] - 1.6 * k, p[1]], sx2 = p => [p[0] - 2.4 * k, p[1]];
-    line([head, hb], '#4a525a', 8.5); line([head, hb], '#9aa3ab', 6.5); line([sx(head), sx(hb)], '#e3e8ec', 3.4); line([sx2(head), sx2(hb)], '#ffffff', 1.2);   // haste cromada
-    poly([[-5, 4], [5, 4], [5, -4], [-5, -4]].map(([x, y]) => [head[0] + x * k, head[1] + y * k]), '#c9d0d6', '#4e565e');   // abraçadeira
-    const g0 = [hb[0] - 21 * k, hb[1]], g1 = [hb[0] + 21 * k, hb[1]];        // guidão em T (manoplas vermelhas)
-    const up = p => [p[0], p[1] - 1.4 * k];
-    line([g0, g1], '#4a525a', 7.5); line([g0, g1], '#9aa3ab', 5.5); line([up(g0), up(g1)], '#ffffff', 1.4);
-    [[g0, 9], [g1, -9]].forEach(([g, d]) => { const e = [g[0] + d * k, g[1]]; line([g, e], '#7a0f13', 9); line([g, e], '#d7262b', 6.5); line([up(g), up(e)], 'rgba(255,190,180,.8)', 1.6); });   // manoplas com brilho
-    ctx.lineCap = 'butt';
-  }
-  // pose f do atlas do patinete com o patinete embaixo (origem do contexto = chão, sob o meio da célula)
-  // crouch (0–1): agacha dobrando só as pernas — fruta e braços descem inteiros junto com o guidão (não achata o mascote)
-  // punhos nas folhas do patinete COM acessório (medidos pelos pixels brancos; no chapéu as mãos ficaram mais baixas)
-  const SC_GRIP_ACC = {
-    chapeu: [[[231, 250], [270, 250]], [[243, 241], [276, 235]], [[264, 247], [292, 236]], [[218, 238], [275, 232]]],
-    bone: [[[228, 243], [270, 236]], [[242, 236], [277, 228]], [[260, 241], [285, 231]], [[215, 239], [275, 228]]]
-  };
-  const SC_HIP = 270;                                                        // linha logo abaixo da fruta na pose andando (célula)
-  function drawScooterPose(f, k, tintKey, yaw = 0, crouch = 0) {
-    const P0 = SC.poses[f] || SC.poses[0];
-    let bar = P0.bar, deck = P0.deck || [P0.bar[0] - SC.bar[0], P0.bar[1] + SC.bar[1], 0];
-    const shoeTop = deck[1] - 18, legs = shoeTop - SC_HIP, drop = crouch * legs * .8;   // canelas ficam com 20% da altura
-    let grip = (accImg('patinete') && (SC_GRIP_ACC[loja.acc] || [])[f]) || P0.grip || null;
-    if (grip) bar = [(grip[0][0] + grip[1][0]) / 2, (grip[0][1] + grip[1][1]) / 2];   // haste no meio do guidão
-    if (drop && bar) { bar = [bar[0], bar[1] + drop]; if (grip) grip = grip.map(q => [q[0], q[1] + drop]); }
-    drawScooter(k, deck, bar, yaw, (dist || t * 300) / (SCG.r * k), grip);
-    if (!ok(SCOOT_IMG)) return;
-    const gripBar = (im, sx, X0, Y0, S2) => {                                 // barra + manoplas por cima do corpo; punhos redesenhados por cima delas
-      if (!scootBar || !grip) return;
-      scootBar(); scootBar = null;
-      ctx.save(); ctx.beginPath();
-      grip.forEach(q => { const x = (q[0] - SC.cx) * k, y = (q[1] - SC.bot) * k; ctx.moveTo(x + 15 * k, y); ctx.arc(x, y, 15 * k, 0, TAU); });
-      ctx.clip(); ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); ctx.restore();
-    };
-    const S2 = SC.size * k, im = tinted(accImg('patinete') || SCOOT_IMG, tintKey), sx = f * SC.size, X0 = -SC.cx * k, Y0 = -SC.bot * k;
-    accOverlay('patinete', f, X0, Y0 + drop * k, k, true);
-    if (!drop) { ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); gripBar(im, sx, X0, Y0, S2); accOverlay('patinete', f, X0, Y0, k, false); return; }
-    const cut = SC_HIP, bottom = SC.size;
-    ctx.drawImage(im, sx, 0, SC.size, cut, X0, Y0 + drop * k, S2, cut * k);                         // corpo descendo inteiro
-    ctx.drawImage(im, sx, cut, SC.size, legs, X0, Y0 + (cut + drop) * k, S2, (legs - drop) * k);       // canelas encolhidas
-    ctx.drawImage(im, sx, shoeTop, SC.size, bottom - shoeTop, X0, Y0 + shoeTop * k, S2, (bottom - shoeTop) * k);   // tênis no lugar
-    gripBar(im, sx, X0, Y0 + drop * k, S2);
-    accOverlay('patinete', f, X0, Y0 + drop * k, k, false);
-  }
-  function scooterFrame() {
-    if (state === 'ready' || state === 'shop') return Math.floor(t * .8) % 2;
-    if (player.grind) return player.grind.g.f;
-    if (player.ground) { if (player.slide) return 0; const c = (runTime || t) % 3.2; return c < .5 ? 1 : 0; }
-    if (player.spin >= 0 && player.trick && TRICKS[player.trick].sc != null) return TRICKS[player.trick].sc;
-    return 0;
-  }
-  function drawScooterRider(ox, oy, tint) {
-    const k = SP.scale, f = scooterFrame(), T = player.spin >= 0 && player.trick && TRICKS[player.trick];
-    const tilt = player.ground || player.grind ? 0 : clamp(-player.vy / 2600, -.18, .22);
-    const bob = player.ground && state === 'running' ? Math.abs(Math.sin(t * 22)) * 1.2 : 0;
-    const yaw = T && T.whip ? (.5 - .5 * Math.cos(Math.PI * clamp(player.spin, 0, 1))) * T.whip * TAU : 0;
-    if (player.crouchK == null) player.crouchK = 0;
-    if (!ghostPass) player.crouchK = lerp(player.crouchK, state === 'running' && player.ground && player.slide ? 1 : 0, .35);   // agacha/levanta suave
-    const squash = player.crouchK;
-    const draw = (x, y, r, a) => {
-      ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y - bob);
-      if (player.grind && state === 'running') {                               // grind: inclina na descida e na ponta da base que raspa
-        const g = player.grind.g, P0 = SC.poses[f] || SC.poses[0], dk = P0.deck || SC.poses[0].deck; ctx.rotate(player.grind.slope);
-        if (g.tilt) { const tx = (dk[0] - SC.cx + Math.sign(g.tilt) * SCG.half) * k, ty = (dk[1] + SCG.th - SC.bot) * k; ctx.translate(tx, ty); ctx.rotate(g.tilt); ctx.translate(-tx, -ty); }
-      } else if (player.ground && player.slope && state === 'running') ctx.rotate(-player.slope);
-      if (r) { const fy = (SC.bot - 216) * k; ctx.translate(0, -fy); ctx.rotate(r); ctx.translate(0, fy); }
-      drawScooterPose(f, k, tint, yaw, squash);
-      ctx.restore();
-    };
-    if (player.spin >= 0) {                                                  // rastro da manobra
-      const tr = player.trail || (player.trail = []);
-      if (state === 'running' && !ghostPass) { tr.forEach(g => g.x -= speed / 60 * .55); tr.push({ x: ox, y: oy, r: tilt }); if (tr.length > 5) tr.shift(); }
-      // (2026-11-19) sem rastro fantasma nas manobras
-    } else if (player.trail) player.trail.length = 0;
-    draw(ox, oy, tilt, 1);
-    if (state === 'running' && player.ground && !ghostPass && Math.random() < .35) { dust(ox + (SCG.rear + 9) * k, oy, 1, .5); if (Math.random() < .5) dust(ox + (SCG.front + 9) * k, oy, 1, .5); }
-  }
   function drawBoardFly() {
     const b = boardFly, k = SP.scale, B = SK.shape;
-    if (b.scooter) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); drawScooter(k, [SC.cx, SC.bot - 31, 0], null, 0, -10); ctx.restore(); return; }
     if (!ok(SKATE_SHAPE)) return;
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.drawImage(shapeImg(), -B.w / 2 * k, -B.h / 2 * k, B.w * k, B.h * k); ctx.restore();
   }
@@ -4068,10 +3840,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (loja.rastro) { ctx.save(); ctx.translate(pv - 62, 240); ctx.scale(1.4, 1.4); drawTrailIcon(loja.rastro, 0, 0, true); ctx.restore(); }
     if (SKp.fx === 'galaxia') for (let i = 0; i < 5; i++) { const an = t * 1.6 + i * TAU / 5; star(pv + Math.cos(an) * 60, 220 + Math.sin(an) * 26, 3, '#ffffff'); }
     if (SKp.fx === 'arcoiris' && 'filter' in ctx) ctx.filter = `hue-rotate(${(t * 140) % 360}deg) saturate(1.3)`;
-    if (scooterOn()) {
-      const z = .62, fr = Math.floor(t * 1.2) % 2;
-      ctx.save(); ctx.translate(pv, 310); drawScooterPose(fr, z, skinKey()); ctx.restore();
-    } else if (skateOn()) {
+    if (skateOn()) {
       const z = .62, fr = Math.floor(t * 1.2) % 2;
       ctx.save(); ctx.translate(pv, 310); drawBoard(fr, z); ctx.restore();
       accOverlay('skate', fr, pv - SK.cx * z, 310 - SK.bot * z, z, true);
@@ -4144,7 +3913,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       LOCS.forEach((it, i) => {
         const x = gx + i * 100, y = 133;
         card('loc:' + it.id, x, y, it.nome, it.preco, !it.preco || loja.tem.includes(it.id), loja.loc === it.id, (x, y) => {
-          if (it.id === 'patinete') { scootPrev = loja.patinete; ctx.translate(x - 6, y + 30); drawScooter(.4, [SC.cx, SC.bot - 31, 0], null, Math.sin(t * 1.2) * .5, 0); scootPrev = null; return; }
           if (it.id === 'skate') { const B = SK.shape, w = 78, h = w * B.h / B.w; ctx.drawImage(shapeImg(), x - w / 2, y - h / 2 + 2, w, h); return; }
           if (!ok(SPRITES)) return; const fr = Math.floor(t * 10) % 6, z = .3;   // correndo
           ctx.drawImage(tinted(SPRITES, skinKey()), (fr % 8) * 256, Math.floor(fr / 8) * 256, 256, 256, x - 128 * z, y + 26 - 246 * z, 256 * z, 256 * z);
@@ -4155,16 +3923,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       });
       // explicação ao lado dos veículos
       ctx.font = `13px ${UI}`; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(234,245,233,.7)';
-      ['Toque no veículo para', 'comprar ou usar.', 'Depois escolha a cor', 'dele logo abaixo.'].forEach((l, i) => ctx.fillText(l, gx + 312, 166 + i * 18));
-      const nomeV = veh === 'skate' ? 'SKATE' : 'PATINETE', LST = veh === 'skate' ? SHAPES : PATINETES, kind = veh === 'skate' ? 'shape' : 'pat';
-      const sel = veh === 'skate' ? loja.shape : loja.patinete;
+      ['Toque no veículo para', 'comprar ou usar.', 'Depois escolha a cor', 'dele logo abaixo.'].forEach((l, i) => ctx.fillText(l, gx + 16 + LOCS.length * 100, 166 + i * 18));
+      const nomeV = 'SKATE', LST = SHAPES, kind = 'shape', sel = loja.shape;
       ctx.fillStyle = temV ? '#ffd23a' : 'rgba(234,245,233,.55)';
       ctx.fillText(temV ? `2  CORES DO ${nomeV}` : `2  CORES DO ${nomeV}  ·  compre o ${nomeV} primeiro`, gx, 262);
       LST.forEach((S, i) => {
         const x = gx + i * 98, y = 268;
         card(kind + ':' + S.id, x, y, S.nome, S.preco, !S.preco || loja.tem.includes(S.id), temV && sel === S.id, (x, y) => {
-          if (veh === 'skate') { ctx.translate(x, y - 4); ctx.rotate(-.12); drawBoard3D(.3, -Math.PI * .78 + Math.sin(t * 1.5) * .12, .18, S); }
-          else { scootPrev = S.id; ctx.translate(x - 6, y + 30); drawScooter(.4, [SC.cx, SC.bot - 31, 0], null, 0, 0); scootPrev = null; }
+          ctx.translate(x, y - 4); ctx.rotate(-.12); drawBoard3D(.3, -Math.PI * .78 + Math.sin(t * 1.5) * .12, .18, S);
         }, !temV);
       });
     }
@@ -4180,14 +3946,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
   }
   let shopTab = 'personagem', shopVeh = 'skate';                              // shopVeh = veículo cujas cores aparecem embaixo
-  const SHOP_LISTS = { skin: [SKINS, 'cor'], acc: [ACCS, 'acc'], loc: [LOCS, 'loc'], shape: [SHAPES, 'shape', 'skate'], pat: [PATINETES, 'patinete', 'patinete'], tr: [TRAILS, 'rastro'] };
+  const SHOP_LISTS = { skin: [SKINS, 'cor'], acc: [ACCS, 'acc'], loc: [LOCS, 'loc'], shape: [SHAPES, 'shape', 'skate'], tr: [TRAILS, 'rastro'] };
   function shopTap(kind, id) {
     if (kind === 'tab') { shopTab = id; if (id === 'locomocao' && loja.loc !== 'pe') shopVeh = loja.loc; return; }
     const L = SHOP_LISTS[kind]; if (!L) return;
     const it = L[0].find(x => x.id === id); if (!it) return;
     if (kind === 'loc' && id !== 'pe') shopVeh = id;                         // mostra as cores deste veículo
     if (L[2] && !loja.tem.includes(L[2])) {                                  // cor de veículo que ainda não tem: não deixa comprar
-      shopMsg = { txt: `Compre o ${L[2] === 'skate' ? 'SKATE' : 'PATINETE'} primeiro!`, cor: '#ff8a7a', t0: t }; beep(180, .18, 'square', .04, .7); return;
+      shopMsg = { txt: 'Compre o SKATE primeiro!', cor: '#ff8a7a', t0: t }; beep(180, .18, 'square', .04, .7); return;
     }
     if (it.preco && !loja.tem.includes(id)) {
       if (loja.carteira < it.preco) { shopMsg = { txt: `Faltam ${it.preco - loja.carteira} tampinhas`, cor: '#ff8a7a', t0: t }; beep(180, .18, 'square', .04, .7); return; }
@@ -4195,7 +3961,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       sfx.buy();
     }
     loja[L[1]] = id;
-    if (L[2]) loja.loc = L[2];                                               // escolheu a cor do skate/patinete: já anda com ele
+    if (L[2]) loja.loc = L[2];                                               // escolheu a cor do skate: já anda com ele
     salvarLoja();
     if (kind === 'acc' || kind === 'loc') { warmAcc(); if (!tintJobs.running) warmTintsStart(); }
   }
@@ -4434,9 +4200,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  const PRELOAD = [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)];
+  const PRELOAD = [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)];
   // folhas do acessório equipado entram na espera (antes carregavam no 1º uso e o mascote aparecia sem o acessório)
-  const ACC_NOMES = ['base', 'desliza', 'mortal', 'poses', 'skate', 'patinete'];
+  const ACC_NOMES = ['base', 'desliza', 'mortal', 'poses', 'skate'];
   if (loja.acc && accImg('base') !== undefined) ACC_NOMES.forEach(n => { accImg(n); const f = ACC_F[loja.acc]; if (f && f[n]) PRELOAD.push(f[n]); });
   // tela de carregamento: o jogo só desenha depois que as imagens chegam (ou 8 s), senão aparecia primeiro o desenho de
   // reserva feito no código (cenário/céu antigos) e depois trocava para as imagens 3D
@@ -4492,7 +4258,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const PODER_TINTS = Object.keys(POWER_TINT).filter(k => !k.startsWith('skin_'));   // só as cores dos poderes (as da loja são feitas quando escolhidas)
   const accRaw = n => { accImg(n); const f = ACC_F[loja.acc]; return (f && f[n]) || null; };
   const warmAcc = () => {
-    const veh = loja.loc === 'skate' ? (accRaw('skate') || SKATE_IMG) : loja.loc === 'patinete' ? (accRaw('patinete') || SCOOT_IMG) : null;
+    const veh = loja.loc === 'skate' ? (accRaw('skate') || SKATE_IMG) : null;
     const sheets = veh ? [veh] : [accRaw('base') || SPRITES, accRaw('desliza') || SLIDE_IMG, accRaw('mortal') || MORTAL_IMG];
     const jobs = [];
     if (skinKey()) [...sheets, accRaw('poses') || POSES_IMG].forEach(im => jobs.push([im, skinKey()]));   // cor comprada primeiro
