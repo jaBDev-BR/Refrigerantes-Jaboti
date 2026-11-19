@@ -232,7 +232,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const START_SPEED = 400, MAX_SPEED = 1000, ACCEL = 5.5;   // 2026-11-18: jogadores acharam rápido demais (antes 440 / 1080 / 9)
 
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d');                                      // let: o escudo mede o mascote desenhando-o num canvas pequeno (shieldFit)
   // resolução de desenho: no app começa em até 1,5× e baixa sozinha se o celular não der conta
   const APP = document.documentElement.classList.contains('app');
   // RANKING ONLINE (Supabase): preencha com a "Project URL" e a chave pública "anon" do projeto
@@ -541,6 +541,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   let speed, dist, score, bonus, caps, gap, flash, shake, hitstop, newBest, runPhase, stepIndex, celebrate, runTime = 0, rankSent = null, boardFly = null, trailHist = [];   // boardFly: skate voando depois da batida
   let hold = false, duckHeld = false;
   let skills, items, skillTimer, lataTimer, invuln, pts, vel;
+  let continued = false, capsBanked = 0, lastM = 0, vehM = 0;              // continuar (1×/partida), tampinhas já na carteira, metros p/ missões
 
   const IDLE_POSE = {
     by: 0, rot: 0, sx: 1, sy: 1,
@@ -554,6 +555,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const COMBO_MAX = 5, COMBO_GRACE = .6;
   function comboAdd(name, p) {
     combo.n++; combo.pts += p; combo.ground = 0; combo.t0 = t; combo.names.push(name); if (combo.names.length > 4) combo.names.shift();
+    stats.maxCombo = Math.max(stats.maxCombo, Math.min(combo.n, COMBO_MAX)); if (combo.n >= 2) missao('combo', Math.min(combo.n, COMBO_MAX));
     if (combo.n >= 2) sfx.combo(combo.n);
   }
   function comboEnd(ok) {
@@ -573,6 +575,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     flash = 0; shake = 0; hitstop = 0; newBest = false; runPhase = 0; stepIndex = 0; celebrate = 0;
     combo = { n: 0, pts: 0, ground: 0, t0: -9, names: [] }; comboMsg = null; trailHist = [];
     skills = {}; items = []; skillTimer = 3.5; lataTimer = 22 + Math.random() * 10; invuln = 0; pts = 0; vel = START_SPEED;
+    continued = false; capsBanked = 0; lastM = 0; vehM = 0;
   }
   // profundidade: d = 0 bem longe (pequeno, lento, transparente) até 1 perto (grande, rápido)
   function newCloud(x) {
@@ -603,6 +606,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function start() {
     reset(); state = 'running'; sfx.start();
+    if (tutorial) tut = { step: 0, feito: false, t2: 0 };
+    stats.partidas++; salvarStats(); missao('partidas', 1);
     // ?poder=turbo (ou lata) começa com um poder ativo (útil para testar)
     const q = new URLSearchParams(location.search).get('poder');
     if (q && (SKILLS[q] || q === 'lata')) activate(q, PX, GROUND - 60);
@@ -624,7 +629,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (JUMP_KEYS.includes(e.key)) { hold = true; pressJump(); }
     if (DUCK_KEYS.includes(e.key)) duckHeld = true;
     if (e.key === 'p' || e.key === 'P') togglePause();
-    if (e.key === 'Escape' && (state === 'shop' || state === 'rank')) state = 'ready';
+    if (e.key === 'Escape' && (state === 'shop' || state === 'rank' || state === 'goals')) state = 'ready';
     if (e.key === 'm' || e.key === 'M') toggleSound();
   });
   document.addEventListener('keyup', e => {
@@ -710,6 +715,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function spawn() {
     const r = Math.random(), x0 = W + 40;
+    if (tutAtivo()) return tutSpawn(x0);                                       // 1ª partida: obstáculos do tutorial
     let w;
     if (wheels() && score > 60 && Math.random() < .3) {
       const q = Math.random();
@@ -803,7 +809,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   function activate(key, x, y) {
     gasBurst(PX + 6, GROUND - player.y - 58, key === 'lata' ? 170 : 130);
     if (key === 'lata') {
-      LATA.combo.forEach(k => { skills[k] = Math.max(skills[k] || 0, LATA.dur); });
+      LATA.combo.forEach(k => { skills[k] = Math.max(skills[k] || 0, LATA.dur); }); missao('garrafas', 1); vib(60);
       sfx.power(); setTimeout(() => sfx.milestone(), 180);
       ring(x, y, LATA.color); ring(x, y, '#ffffff'); sparkle(x, y, 28, LATA.color); confetti(x, y, 26);
       powerBanner = { title: LATA.label, desc: LATA.desc, color: LATA.color, t0: t };
@@ -812,6 +818,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     const sk = SKILLS[key];
     skills[key] = sk.dur;
+    if (!stats.poderes.includes(key)) stats.poderes.push(key); missao('garrafas', 1); vib(40);
     sfx.power(); ring(x, y, sk.color); sparkle(x, y, 16, sk.color);
     powerBanner = { title: sk.label, desc: sk.desc, color: sk.color, t0: t };
     flash = Math.max(flash, .3);
@@ -828,7 +835,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (skills.turbo > 0) { smash(o); return false; }
     if (invuln > 0) return false;
     if (skills.escudo > 0) {
-      delete skills.escudo; invuln = 1.2; smash(o); sfx.shield();
+      delete skills.escudo; invuln = 1.2; smash(o); sfx.shield(); shieldBurst();
       ring(PX, GROUND - player.y - 55, '#7fd0ff'); sparkle(PX, GROUND - player.y - 55, 20, '#bfe8ff');
       return false;
     }
@@ -902,6 +909,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const cap = MAX_JUMP + (skills.pulo > 0 ? 45 : 0);
     player.vy = clamp(Math.sqrt(Math.max(0, cap - player.y) * 2 * G), 320, DJUMP_V); player.jumps++; player.spin = 0; player.stretch = 1;
     player.trick = pickTrick(); player.trail = [];
+    stats.manobras++; missao('manobras', 1); vib(18); if (tut && tut.step === 2) tut.feito = true;
     const T = TRICKS[player.trick];
     popText(PX + 70, Math.max(70, GROUND - player.y - 110), T.label, T.color);
     const tp = (player.trick === 'duplo' || player.trick === 'duplosk' ? 50 : 25) * mult(); bonus += tp; comboAdd(T.label.replace('!', ''), tp);
@@ -996,8 +1004,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     comboEnd(false); player.grind = null; player.slope = 0; player.stairDrop = 0; player.vy = 640; player.ground = false; player.deadT = 0; player.landedDead = false; player.spin = -1;
     sparkle(PX + 20, GROUND - player.y - 50, 14, '#ffffff'); sfx.hit(); skills = {};
     if (wheels()) boardFly = { x: PX, y: GROUND - player.y - 8, vx: 260, vy: -520, r: 0, vr: 9, scooter: scooterOn(), bmx: bmxOn() };
-    loja.carteira += caps; salvarLoja();                                      // tampinhas da partida vão para a carteira
+    loja.carteira += caps - capsBanked; capsBanked = caps; salvarLoja();     // tampinhas da partida vão para a carteira (sem contar 2× ao continuar)
     if (score > best) { best = score; newBest = true; try { localStorage.setItem('jabotiRunBest', String(best)); } catch (e) {} }
+    vib(140);
+    stats.maxMetros = Math.max(stats.maxMetros, Math.floor(dist / 50)); missao('metros', Math.floor(dist / 50)); missao('pontos', Math.floor(score));
+    salvarMissoes(); salvarStats(); checarMedalhas();
   }
 
   // ================================================================
@@ -1008,6 +1019,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { const top = GROUND - player.y - 140, want = (state === 'running' || state === 'dying') ? clamp(16 - top, 0, 90) : 0;   // topo do mascote (com veículo) a 16 px da borda
       camY += (want - camY) * (1 - Math.exp(-realDt * 7)); }
     if (state === 'running' && skills.lento > 0) dt *= .55;   // câmera lenta da Uva
+    if (state === 'running') { dt *= tutUpdate(realDt); acompanhar(); }   // tutorial: câmera lenta até o jogador fazer o movimento
     t += dt;
     shake = Math.max(0, shake - dt * 40);
     flash = Math.max(0, flash - dt * 1.4);
@@ -1109,7 +1121,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (comboMsg) { comboMsg.life -= realDt; if (comboMsg.life <= 0) comboMsg = null; }
       const wasSliding = player.slide;
       player.slide = duckHeld && player.ground;
-      if (player.slide && !wasSliding) { sfx.slide(); dust(PX + 10, GROUND, 6, 1.4); }
+      if (player.slide && !wasSliding) { sfx.slide(); dust(PX + 10, GROUND, 6, 1.4); missao('deslizes', 1); }
       if (player.slide && Math.random() < .5) dust(PX + 18, GROUND, 1, 1.2);
 
       // passos levantam poeira
@@ -1136,9 +1148,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (gap <= 0) { const w = spawn(); gap = w + speed * (.7 + Math.random() * .75) + 190; }
       // garrafas de poder aparecem nos espaços livres entre obstáculos
       skillTimer -= dt;
-      if (skillTimer <= 0 && gap > 280) { spawnSkill(); skillTimer = 6 + Math.random() * 5; }
+      if (skillTimer <= 0 && gap > 280 && !tutAtivo()) { spawnSkill(); skillTimer = 6 + Math.random() * 5; }
       lataTimer -= dt;
-      if (lataTimer <= 0 && gap > 280) { spawnLata(); lataTimer = 25 + Math.random() * 15; skillTimer = Math.max(skillTimer, 3); }
+      if (lataTimer <= 0 && gap > 280 && !tutAtivo()) { spawnLata(); lataTimer = 25 + Math.random() * 15; skillTimer = Math.max(skillTimer, 3); }
       if (skills.turbo > 0 && Math.random() < .7) particles.push({ type: 'spark', x: PX - 20, y: GROUND - player.y - 20 - Math.random() * 60, vx: -300 - Math.random() * 200, vy: (Math.random() - .5) * 40, life: .35, max: .35, r: 2 + Math.random() * 2, color: Math.random() < .5 ? '#ffd23a' : '#ff8a3a' });
 
       const box = playerBox();
@@ -1146,7 +1158,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         if (c.x < -30) return false;
         const cx = clamp(c.x, box.x1 - 6, box.x2 + 6), cy = clamp(c.y, box.y1 - 6, box.y2 + 6);
         if ((c.x - cx) ** 2 + (c.y - cy) ** 2 < 14 * 14) {
-          caps++; bonus += 10 * mult(); sfx.coin(); sparkle(c.x, c.y, 8); popText(c.x, c.y - 12, '+' + 10 * mult());
+          caps++; stats.capsTotal++; missao('caps', 1); bonus += 10 * mult(); sfx.coin(); sparkle(c.x, c.y, 8); popText(c.x, c.y - 12, '+' + 10 * mult());
           return false;
         }
         return true;
@@ -1155,7 +1167,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         if (box.x2 > it.x - 14 && box.x1 < it.x + 14 && box.y2 > it.y - 32 && box.y1 < it.y + 32) { activate(it.skill, it.x, it.y); return false; }
         return true;
       });
-      for (const o of obstacles) if (!o.dead && hits(o, box) && handleHit(o)) break;
+      for (const o of obstacles) if (!o.dead && !(o.tut && tutorial) && hits(o, box) && handleHit(o)) break;   // obstáculos do tutorial não derrubam
     } else if (state === 'dying' || state === 'over') {
       if (hitstop > 0) { hitstop -= dt; return; }
       player.deadT += dt;
@@ -1173,7 +1185,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     particles.forEach(p => {
       p.life -= dt;
       if (p.type === 'dust') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 120 * dt; p.r += dt * 10; }
-      else if (p.type === 'spark') { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .92; p.vy *= .92; }
+      else if (p.type === 'hexshard') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * dt; p.rot += p.vr * dt; }
+      else if (p.type === 'shockwave') { p.r += 420 * dt; }
+      else if (p.type === 'spark' || p.type === 'star3d' || p.type === 'ember') { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .92; p.vy *= .92; }
       else if (p.type === 'ring') { p.r += dt * 160; }
       else if (p.type === 'confetti') { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 420 * dt; p.rot += p.vr * dt; }
       else if (p.type === 'bubble' || p.type === 'note') { p.x += p.vx * dt + Math.sin(t * 6 + p.ph) * 20 * dt; p.y += p.vy * dt; }
@@ -1287,7 +1301,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { id: 'arcoiris', nome: 'ARCO-ÍRIS', preco: 700, fx: 'arcoiris' }
   ];
   // locomoção (a pé ou de skate), estampas do skate e rastros atrás do mascote
-  const LOCS = [{ id: 'pe', nome: 'A PÉ', preco: 0 }, { id: 'skate', nome: 'SKATE', preco: 400 }, { id: 'patinete', nome: 'PATINETE', preco: 450 }, { id: 'bmx', nome: 'BMX', preco: 600 }];
+  const LOCS = [{ id: 'pe', nome: 'A PÉ', preco: 0 }, { id: 'skate', nome: 'SKATE', preco: 400 }, { id: 'patinete', nome: 'PATINETE', preco: 450 }];   // BMX saiu da loja em 2026-11-19 (código dela ficou parado: bmxOn() nunca liga)
+  // cores do patinete (recolore as peças 3D: vermelho → base, faixa amarela → faixa; ver scootImg)
+  const PATINETES = [
+    { id: 'pt_classico', nome: 'CLÁSSICO', preco: 0, base: '#d7262b', stripe: '#f5c31a' },
+    { id: 'pt_azul', nome: 'AZUL', preco: 150, base: '#2b6fe0', stripe: '#ffffff' },
+    { id: 'pt_jaboti', nome: 'JABOTI', preco: 200, base: '#23a04f', stripe: '#ffd23a' },
+    { id: 'pt_preto', nome: 'PRETO', preco: 250, base: '#26262c', stripe: '#ff7a1a' },
+    { id: 'pt_neon', nome: 'NEON', preco: 300, base: '#ff3fa4', stripe: '#33e6ff' },
+    { id: 'pt_ouro', nome: 'OURO', preco: 600, base: '#d4a017', stripe: '#fff1a8' }
+  ];
   const SHAPES = [
     { id: 'sh_classico', nome: 'CLÁSSICO', preco: 0, base: '#cf2329', stripe: '#f5c31a' },
     { id: 'sh_jaboti', nome: 'JABOTI', preco: 200, base: '#d7262b', stripe: '#ffd23a', pat: 'jaboti' },
@@ -1304,37 +1327,376 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // mais a pose de deslize com ele. slide: [centro x da fruta, sola y] na imagem do deslize
   const ACCS = [
     { id: '', nome: 'NENHUM', preco: 0 },
-    { id: 'bone', nome: 'BONÉ', preco: 150, slide: [105.6, 188], mortal: true },
-    { id: 'chapeu', nome: 'CHAPÉU', preco: 250, slide: [91.1, 165], mortal: true },
-    { id: 'oculos', nome: 'ÓCULOS', preco: 300, slide: [102.3, 177], mortal: true },
-    { id: 'coroa', nome: 'COROA', preco: 500, slide: [105.6, 193], mortal: true }
+    { id: 'bone', nome: 'BONÉ', preco: 150, folhas: true, slide: [101.9, 180] },   // folhas: poses geradas JÁ com o acessório (assets/acessorios/bone/)
+    { id: 'chapeu', nome: 'CHAPÉU', preco: 250, folhas: true, slide: [97.2, 181] },
+    { id: 'coroa', nome: 'COROA', preco: 500 }
   ];
+  // ACESSÓRIOS 3D (2026-11-19): peças soltas desenhadas por cima da fruta em TODAS as folhas (a pé, mortal, deslize,
+  // poses, skate, patinete e BMX). ACC_ANCH = por folha e célula: [cx, cy, r da fruta, olhos x, y, ângulo, distância]
+  // (medido por ferramentas/ancoras-acessorios.py). Peças em r: w = largura; ax/ay = deslocamento; modo de encaixe.
+  const ACC_PECAS = {
+    bone:     { w: 2.1, ax: -.06, ay: -.47, modo: 'base' },
+    chapeu:   { w: 2.45, ax: 0, ay: -.56, modo: 'base' },
+    coroa:    { w: 1.45, ax: -.04, ay: -.72, modo: 'base' },
+    capa:     { w: 1.75, ax: -.3, ay: -.5, modo: 'costas' }
+  };
+  const ACC_USA = { bone: ['bone'], chapeu: ['chapeu'], coroa: ['capa', 'coroa'] };
+  // folhas do mascote já com o acessório desenhado (geradas no ChatGPT; ferramentas/montar-acessorio-3d.py) — carregadas só quando usadas
+  const ACC_F = {};
+  function accImg(nome, id = loja.acc) {
+    const A = ACCS.find(a => a.id === id); if (!A || !A.folhas) return null;
+    const f = ACC_F[id] || (ACC_F[id] = {});
+    if (!f[nome]) { f[nome] = new Image(); f[nome].src = `assets/acessorios/${id}/mascote${nome === 'base' ? '' : '-' + nome}.webp`; }
+    return ok(f[nome]) ? f[nome] : null;
+  }
+  const ACC_FOLHA = { base: 'base', slide: 'desliza', mortal: 'mortal', poses: 'poses', skate: 'skate', patinete: 'patinete', bmx: 'bmx' };
+  const ACC_IMG = {}; Object.keys(ACC_PECAS).forEach(p => { const i = new Image(); i.src = 'assets/acessorios/3d-' + p + '.webp'; ACC_IMG[p] = i; });
+  const ACC_ANCH = {base:{0:[140.4,110.8,56.5,165.3,86.1,0.009,25.3],1:[141.1,111.3,56.5,165.3,86.2,-0.037,25.0],2:[139.9,110.8,56.6,162.1,81.7,-0.095,24.9],3:[140.5,109.3,57.3,164.8,80.4,-0.105,24.3],4:[141.2,111.1,56.4,166.1,85.3,-0.012,24.4],5:[140.1,110.5,56.8,162.4,82.7,-0.139,25.5],11:[140.2,104.3,56.5,162.8,75.2,0.002,25.2],12:[136.0,111.5,56.3,157.7,84.6,-0.007,26.1],13:[145.4,110.6,56.3,167.5,82.4,-0.044,25.7],14:[140.8,138.3,56.9,167.8,113.8,-0.019,24.3],19:[140.2,114.4,56.7,157.2,103.1,0,28.3],20:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],21:[140.8,124.6,56.4,164.4,97.1,0.103,26.1],22:[140.8,124.6,56.5,164.4,97.1,0.103,26.1],23:[140.8,124.6,56.5,164.4,97.1,0.105,26.0]},slide:{0:[103.0,90.2,54.7,121.9,61.7,-0.227,25.3]},mortal:{0:[209.1,210.5,69.1,221.9,192.8,-1.424,39.4],1:[210.6,211.8,68.7,215.0,214.4,0,34.3],2:[209.6,210.4,69.3,234.4,174.3,-0.104,30.7],3:[211.0,210.5,68.9,241.4,179.5,-0.021,30.7],4:[209.7,180.7,69.3,230.5,166.8,0,34.7]},poses:{0:[210.2,267.4,65.8,249.1,266.1,1.009,9.1],1:[210.3,250.7,65.2,232.9,219.6,-0.055,32.2],2:[210.2,273.9,65.1,229.7,260.8,0,32.6],3:[210.1,269.9,64.7,196.9,254.2,0.397,70.9]},skate:{0:[199.4,223.1,55.8,227.6,203.0,0.025,24.5],1:[199.2,220.5,56.4,229.3,202.3,0.002,24.6],2:[199.3,217.1,56.2,228.2,197.4,0.014,24.7],3:[198.9,261.7,56.8,210.2,246.5,0,28.4],4:[200.0,215.0,57.0,225.7,193.5,-0.086,25.4],5:[199.6,225.8,56.8,208.8,205.8,0,28.4],6:[198.7,210.8,56.1,229.0,193.4,-0.171,23.2],7:[199.7,217.5,57.0,230.6,201.2,-0.116,23.7],8:[199.7,236.8,56.1,218.4,216.6,0,28.0],9:[199.5,229.3,54.7,190.6,215.5,0.096,62.4],10:[200.9,242.6,57.6,196.9,225.9,-0.164,76.9]},patinete:{0:[198.7,221.1,57.0,222.2,197.1,-0.139,26.3],1:[200.1,213.2,56.7,223.0,187.9,-0.164,25.8],2:[198.4,212.4,56.8,222.9,188.5,-0.194,25.6],3:[198.3,214.1,56.9,225.0,190.8,-0.161,24.5],4:[199.6,214.2,56.7,221.1,190.6,-0.176,27.8]},bmx:{0:[198.1,170.0,57.0,225.1,145.9,-0.15,23.7],1:[199.8,156.3,57.0,224.6,133.8,-0.006,25.6],2:[198.3,156.8,56.3,224.9,134.1,-0.16,24.3],3:[200.4,156.8,57.2,227.3,132.3,-0.147,23.7],4:[199.5,124.8,57.4,224.4,105.5,-0.046,28.1],5:[199.2,133.4,55.3,225.2,112.3,-0.118,24.5]}};
+  // desenha o acessório da loja (ou `id`) para a célula `i` da folha `folha`, cuja célula está desenhada em (dx, dy) com escala z.
+  // atras = true: peças que ficam atrás do corpo (capa, headset); chamar antes e depois do drawImage do mascote.
+  function accOverlay(folha, i, dx, dy, z, atras, id = loja.acc, c = ctx) {
+    const usa = ACC_USA[id], a = ACC_ANCH[folha] && ACC_ANCH[folha][i]; if (!usa || !a) return;
+    if (accImg(ACC_FOLHA[folha], id)) return;                                 // a folha já tem o acessório desenhado
+    const [cx, cy, r, ex0, ey0, ea0, ed] = a;
+    const olhosOk = !(ed < .3 * r || ed > .8 * r || Math.abs(ea0) > .5 || ey0 > cy);
+    const ex = olhosOk ? ex0 : cx + .3 * r, ey = olhosOk ? ey0 : cy - .25 * r, ea = olhosOk ? ea0 : 0;
+    for (const p of usa) {
+      const R = ACC_PECAS[p], im = ACC_IMG[p]; if (!ok(im)) continue;
+      const doisLados = R.frente != null, soAtras = p === 'capa';
+      if (atras ? !(soAtras || doisLados) : soAtras) continue;
+      const w = R.w * r, h = im.naturalHeight * w / im.naturalWidth;
+      let x, y, ang = 0;
+      if (R.modo === 'base') { x = cx + R.ax * r - w / 2; y = cy + R.ay * r - h; }
+      else if (R.modo === 'centro') { x = cx + R.ax * r - w / 2; y = cy + R.ay * r - h / 2; }
+      else if (R.modo === 'olhos') { x = ex + .03 * r - w / 2; y = ey - h / 2; ang = ea; }
+      else if (R.modo === 'colar') { x = cx + (ex - cx) * .45 - w / 2; y = cy + R.ay * r; }
+      else { x = cx + R.ax * r - w; y = cy + R.ay * r; }                   // costas: a capa sai para trás do ombro
+      c.save();
+      if (doisLados && !atras) { c.beginPath(); c.rect(dx + x * z, dy + y * z, w * R.frente * z, h * z); c.clip(); }
+      if (ang) { const px = dx + (x + w / 2) * z, py = dy + (y + h / 2) * z; c.translate(px, py); c.rotate(ang); c.translate(-px, -py); }
+      c.drawImage(im, dx + x * z, dy + y * z, w * z, h * z);
+      c.restore();
+    }
+  }
   const ACC_SHEET = {}, ACC_SLIDE = {}, ACC_MORTAL = {};
   ACCS.forEach(a => { if (!a.id) return;
-    if (a.mortal) { const m = new Image(); m.src = 'assets/mascote-mortal-' + a.id + '.webp'; ACC_MORTAL[a.id] = m; }   // poses de giro com o acessório
-    const i = new Image(); i.src = 'assets/mascote-' + a.id + '.webp'; ACC_SHEET[a.id] = i;
-    const d = new Image(); d.src = 'assets/mascote-desliza-' + a.id + '.webp'; ACC_SLIDE[a.id] = d; });
-  let loja = { carteira: 0, tem: ['classico', ''], cor: 'classico', acc: '', loc: 'pe', shape: 'sh_classico', rastro: '' };
+    /* folhas antigas (2D) com o acessório desenhado não são mais carregadas: o acessório 3D vai por cima (accOverlay) */ });
+  let loja = { carteira: 0, tem: ['classico', ''], cor: 'classico', acc: '', loc: 'pe', shape: 'sh_classico', patinete: 'pt_classico', rastro: '' };
   try { loja = Object.assign(loja, JSON.parse(localStorage.getItem('jabotiRunLoja') || '{}')); } catch (e) {}
+  // óculos e headset saíram da loja (2026-11-19, o usuário não gostou): quem comprou recebe as tampinhas de volta e o item é desequipado
+  // BMX saiu da loja (2026-11-19): mesma coisa, devolve as 600 tampinhas e volta a pé
+  { const REMOVIDOS = { oculos: 300, headset: 350, bmx: 600 }; let mudou = false;
+    Object.entries(REMOVIDOS).forEach(([id, preco]) => { if (loja.tem.includes(id)) { loja.tem = loja.tem.filter(x => x !== id); loja.carteira += preco; mudou = true; } if (loja.acc === id) { loja.acc = ''; mudou = true; } if (loja.loc === id) { loja.loc = 'pe'; mudou = true; } });
+    if (mudou) try { localStorage.setItem('jabotiRunLoja', JSON.stringify(loja)); } catch (e) {} }
   if (loja.acc === 'skate') { loja.acc = ''; loja.loc = 'skate'; }          // antes o skate era um "acessório"
   if (!ACCS.some(a => a.id === loja.acc)) loja.acc = '';                     // acessório antigo que saiu da loja
   if (!LOCS.some(a => a.id === loja.loc)) loja.loc = 'pe';
   if (!SHAPES.some(a => a.id === loja.shape)) loja.shape = 'sh_classico';
+  if (!PATINETES.some(a => a.id === loja.patinete)) loja.patinete = 'pt_classico';
   if (!TRAILS.some(a => a.id === loja.rastro)) loja.rastro = '';
   if (!SKINS.some(a => a.id === loja.cor)) loja.cor = 'classico';
   const salvarLoja = () => { try { localStorage.setItem('jabotiRunLoja', JSON.stringify(loja)); } catch (e) {} };
+
+  // ================================================================
+  //  JOGAR DE NOVO TODO DIA (2026-11-19): missões diárias, medalhas, tutorial, continuar, vibração e compartilhar
+  // ================================================================
+  // vibração: no app pela ponte Java (JabotiApp.vibrar), no navegador pela Vibration API
+  const vib = ms => { try { if (window.JabotiApp && JabotiApp.vibrar) JabotiApp.vibrar(ms); else if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} };
+  // avisos no alto da tela (missão cumprida, medalha) — um por vez
+  const toasts = [];
+  function toast(title, sub, color = '#ffd23a') { toasts.push({ title, sub, color, t0: null }); }
+  function drawToasts() {
+    const q = toasts[0]; if (!q) return;
+    if (q.t0 === null) q.t0 = performance.now() / 1000;
+    const a = performance.now() / 1000 - q.t0; if (a > 3) { toasts.shift(); return; }
+    const fim = state === 'over' || state === 'dying', w = fim ? 340 : 430, x = fim ? W - w - 14 : W / 2 - w / 2;   // na tela de fim vai para o canto direito (livre)
+    const k = a < .3 ? easeOut(a / .3) : a > 2.6 ? 1 - (a - 2.6) / .4 : 1, y = (fim ? 70 : 54) - (1 - k) * 70;
+    ctx.save(); ctx.globalAlpha = clamp(k, 0, 1);
+    ctx.fillStyle = 'rgba(8,24,16,.88)'; rr(x, y, w, 58, 29); ctx.fill(); ctx.strokeStyle = q.color; ctx.lineWidth = 3; ctx.stroke();
+    ctx.font = `30px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏅', x + 34, y + 30);
+    ctx.textAlign = 'left'; ctx.font = `19px ${UI}`; ctx.fillStyle = q.color; ctx.fillText(q.title, x + 62, y + 20);
+    ctx.font = `15px ${UI}`; ctx.fillStyle = '#eaf5e9'; ctx.fillText(q.sub, x + 62, y + 41);
+    ctx.restore();
+  }
+  // ---- estatísticas e medalhas (permanentes) ----
+  let stats = { partidas: 0, capsTotal: 0, manobras: 0, poderes: [], maxMetros: 0, maxCombo: 0, fabrica: false, compras: 0, got: [] };
+  try { stats = Object.assign(stats, JSON.parse(localStorage.getItem('jabotiRunMedalhas') || '{}')); } catch (e) {}
+  const salvarStats = () => { try { localStorage.setItem('jabotiRunMedalhas', JSON.stringify(stats)); } catch (e) {} };
+  const MEDALHAS = [
+    { id: 'primeira', nome: 'Primeira corrida', desc: 'Jogue uma partida', premio: 20, ok: s => s.partidas >= 1 },
+    { id: 'p500', nome: '500 pontos', desc: 'Faça 500 pontos', premio: 50, ok: () => best >= 500 },
+    { id: 'p1000', nome: '1.000 pontos', desc: 'Faça 1.000 pontos', premio: 100, ok: () => best >= 1000 },
+    { id: 'p2000', nome: '2.000 pontos', desc: 'Faça 2.000 pontos', premio: 200, ok: () => best >= 2000 },
+    { id: 'km1', nome: 'Maratonista', desc: 'Corra 1 km numa partida', premio: 50, ok: s => s.maxMetros >= 1000 },
+    { id: 'km3', nome: 'Ultramaratona', desc: 'Corra 3 km numa partida', premio: 150, ok: s => s.maxMetros >= 3000 },
+    { id: 'caps100', nome: 'Colecionador', desc: 'Junte 100 tampinhas', premio: 50, ok: s => s.capsTotal >= 100 },
+    { id: 'caps1000', nome: 'Tampinha de ouro', desc: 'Junte 1.000 tampinhas', premio: 200, ok: s => s.capsTotal >= 1000 },
+    { id: 'man25', nome: 'Acrobata', desc: 'Faça 25 manobras', premio: 50, ok: s => s.manobras >= 25 },
+    { id: 'man100', nome: 'Mestre das manobras', desc: 'Faça 100 manobras', premio: 150, ok: s => s.manobras >= 100 },
+    { id: 'poderes', nome: 'Provou de tudo', desc: 'Beba os 6 poderes', premio: 100, ok: s => s.poderes.length >= 6 },
+    { id: 'combo5', nome: 'Combo máximo', desc: 'Faça um combo x5', premio: 100, ok: s => s.maxCombo >= 5 },
+    { id: 'fabrica', nome: 'Visita à fábrica', desc: 'Chegue dentro da fábrica', premio: 50, ok: s => s.fabrica },
+    { id: 'compra', nome: 'Freguês', desc: 'Compre algo na loja', premio: 30, ok: s => s.compras >= 1 }
+  ];
+  function checarMedalhas() {
+    let mudou = false;
+    MEDALHAS.forEach(m => {
+      if (stats.got.includes(m.id) || !m.ok(stats)) return;
+      stats.got.push(m.id); loja.carteira += m.premio; mudou = true;
+      toast('MEDALHA: ' + m.nome, `${m.desc}  ·  +${m.premio} tampinhas`, '#ffd23a'); vib(40);
+    });
+    if (mudou) { salvarStats(); salvarLoja(); sfx.milestone(); }
+  }
+  // ---- missões do dia: 3 por dia, sorteadas pela data (iguais o dia todo), prêmio em tampinhas ----
+  const hoje = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  const temVeiculo = () => loja.tem.some(x => x === 'skate' || x === 'patinete');
+  const MISSOES = [
+    { id: 'caps', txt: n => `Pegue ${n} tampinhas`, alvos: [30, 50, 80], premios: [30, 50, 80], soma: true },
+    { id: 'manobras', txt: n => `Faça ${n} manobras no ar`, alvos: [3, 6, 10], premios: [30, 50, 70], soma: true },
+    { id: 'metros', txt: n => `Corra ${n} m numa partida`, alvos: [400, 700, 1000], premios: [30, 60, 100] },
+    { id: 'pontos', txt: n => `Faça ${n} pontos numa partida`, alvos: [200, 400, 700], premios: [30, 60, 100] },
+    { id: 'garrafas', txt: n => `Beba ${n} garrafas de poder`, alvos: [3, 5, 8], premios: [30, 50, 80], soma: true },
+    { id: 'deslizes', txt: n => `Deslize ${n} vezes`, alvos: [10, 20, 30], premios: [20, 40, 60], soma: true },
+    { id: 'combo', txt: n => `Faça um combo x${n}`, alvos: [2, 3, 4], premios: [40, 60, 90] },
+    { id: 'veiculo', txt: n => `Ande ${n} m de skate ou patinete`, alvos: [300, 500, 800], premios: [40, 60, 90], soma: true, precisa: temVeiculo },
+    { id: 'partidas', txt: n => `Jogue ${n} partidas`, alvos: [3, 5, 8], premios: [20, 40, 60], soma: true }
+  ];
+  let missoes = null;
+  function carregarMissoes() {
+    try { missoes = JSON.parse(localStorage.getItem('jabotiRunMissoes') || 'null'); } catch (e) { missoes = null; }
+    if (missoes && missoes.dia === hoje()) return;
+    let seed = [...hoje()].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296;
+    const pool = MISSOES.filter(m => !m.precisa || m.precisa()), lista = [];
+    while (lista.length < 3 && pool.length) {
+      const m = pool.splice(Math.floor(rnd() * pool.length), 1)[0], lv = Math.floor(rnd() * 3);
+      lista.push({ id: m.id, alvo: m.alvos[lv], premio: m.premios[lv], prog: 0, feito: false });
+    }
+    missoes = { dia: hoje(), lista }; salvarMissoes();
+  }
+  const salvarMissoes = () => { try { localStorage.setItem('jabotiRunMissoes', JSON.stringify(missoes)); } catch (e) {} };
+  const missaoTxt = m => MISSOES.find(x => x.id === m.id).txt(m.alvo);
+  function missao(id, v) {
+    if (!missoes || missoes.dia !== hoje()) carregarMissoes();
+    missoes.lista.forEach(m => {
+      if (m.id !== id || m.feito) return;
+      const soma = MISSOES.find(x => x.id === id).soma;
+      m.prog = soma ? m.prog + v : Math.max(m.prog, v);
+      if (m.prog >= m.alvo) {
+        m.prog = m.alvo; m.feito = true; loja.carteira += m.premio; salvarLoja(); salvarMissoes();
+        toast('MISSÃO CUMPRIDA!', `${missaoTxt(m)}  ·  +${m.premio} tampinhas`, '#9bcb45'); sfx.milestone(); vib(40);
+      }
+    });
+  }
+  carregarMissoes();
+  // acompanhamento durante a corrida (metros, pontos, veículo, fábrica) — chamado no update
+  function acompanhar() {
+    const m = Math.floor(dist / 50);
+    if (m !== lastM) {
+      if (wheels()) { vehM += m - lastM; if (vehM >= 10) { missao('veiculo', vehM); vehM = 0; } }
+      lastM = m; if (m % 10 === 0) { missao('metros', m); missao('pontos', Math.floor(score)); }
+    }
+    if (!stats.fabrica && biomeWeights().fabrica > .5) { stats.fabrica = true; checarMedalhas(); }
+  }
+  // ---- tutorial na 1ª partida: obstáculos devagar, com a mãozinha mostrando o botão ----
+  let tutorial = false; try { tutorial = !localStorage.getItem('jabotiRunTutorial'); } catch (e) {}
+  let tut = null;                                   // { step: 0 pular, 1 deslizar, 2 manobra, t2 }
+  const tutAtivo = () => tutorial && tut && state === 'running';
+  function tutFim() {
+    tutorial = false; tut = null; try { localStorage.setItem('jabotiRunTutorial', '1'); } catch (e) {}
+    toast('TUTORIAL COMPLETO!', 'Agora é com você. Boa corrida!', '#7fd0ff');
+  }
+  // o obstáculo do passo atual (marcado com o.tut) e se o jogador já fez o movimento pedido
+  function tutUpdate(dt) {
+    if (!tutAtivo()) return 1;
+    const o = obstacles.find(o => o.tut === tut.step + 1);
+    if (tut.step === 2) { tut.t2 += dt; if (tut.feito || tut.t2 > 6) tutFim(); return 1; }
+    if (!o) return 1;
+    if (o.x + o.w < PX - 40) { tut.step++; tut.feito = false; tut.t2 = 0; if (tut.step === 1 && bmxOn()) tut.step = 2; return 1; }
+    const perto = o.x - PX < 420 && o.x - PX > 20;
+    const fez = tut.step === 0 ? !player.ground : player.slide;
+    if (fez) tut.feito = true;
+    return perto && !tut.feito ? .3 : 1;            // câmera lenta até o jogador fazer o movimento
+  }
+  function tutSpawn(x0) {                            // substitui o sorteio dos obstáculos durante o tutorial
+    if (tut.step === 0 && !tut.s0) { tut.s0 = true; obstacles.push({ kind: 'crate', x: x0, w: CRATE_W, h: CRATE_H, cols: 1, rows: 1, tut: 1 }); return CRATE_W + 300; }
+    if (tut.step === 1 && !tut.s1) { tut.s1 = true; obstacles.push({ kind: 'drone', x: x0, w: 54, bottom: GROUND - 96, ph: 0, tut: 2 }); return 360; }
+    return 300;                                      // espera o passo atual terminar
+  }
+  // posição (no mundo) do botão na tela: no app, os botões translúcidos; no site, um lugar fixo
+  function tutAlvo(id) {
+    const el = document.getElementById(id), r = canvas.getBoundingClientRect();
+    if (APP && el && el.offsetParent !== null) { const b = el.getBoundingClientRect(); return [(b.left + b.width / 2 - r.left) / r.width * W, (b.top + b.height / 2 - r.top) / r.height * H]; }
+    return [W / 2, H - 46];
+  }
+  function drawTutorial() {
+    if (!tutAtivo()) return;
+    let txt, alvo;
+    if (tut.step === 2) { txt = APP ? 'TOQUE 2× NO AR = MANOBRA!' : 'APERTE 2× NO AR = MANOBRA!'; alvo = tutAlvo('jump'); }
+    else {
+      const o = obstacles.find(o => o.tut === tut.step + 1);
+      if (!o || tut.feito || o.x - PX > 420) return;
+      txt = tut.step === 0 ? (APP ? 'TOQUE PARA PULAR' : 'ESPAÇO ou ↑ PARA PULAR') : (APP ? 'SEGURE PARA DESLIZAR' : 'SEGURE ↓ PARA DESLIZAR');
+      alvo = tutAlvo(tut.step === 0 ? 'jump' : 'duck');
+    }
+    const p = (performance.now() / 1000) % 1, [ax, ay] = alvo;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,255,255,${1 - p})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(ax, ay, 30 + p * 40, 0, TAU); ctx.stroke();   // anel pulsando no botão
+    ctx.font = '54px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('👆', ax + 6, ay + 38 + Math.sin(performance.now() / 160) * 6);                     // mãozinha tocando
+    text3d(txt, W / 2, 150, 34, '#ffffff', '#ffe066', 'rgba(10,30,20,.9)', 4);
+    ctx.restore();
+  }
+  // ---- continuar a partida gastando tampinhas (1 vez por partida) ----
+  const CONT_PRECO = 50;
+  function continuar() {
+    if (continued || state !== 'over') return;
+    if (loja.carteira < CONT_PRECO) { toast('TAMPINHAS INSUFICIENTES', `Faltam ${CONT_PRECO - loja.carteira} para continuar`, '#ff8a7a'); return; }
+    loja.carteira -= CONT_PRECO; salvarLoja(); continued = true;
+    Object.assign(player, { y: 0, vy: 0, ground: true, jumps: 0, coyote: 0, buffer: 0, spin: -1, land: 0, dx: 0, deadT: 0, landedDead: false, rotDead: 0, slide: false, grind: null, slope: 0, stairDrop: 0, trick: null });
+    obstacles = obstacles.filter(o => o.x > PX + 520); boardFly = null; gap = Math.max(gap, 520);
+    speed = Math.max(START_SPEED, speed * .85); vel = speed; invuln = 2.5; state = 'running'; last = performance.now();
+    sfx.power(); ring(PX, GROUND - 55, '#ffd23a'); sparkle(PX, GROUND - 55, 24, '#ffd23a'); flash = .4;
+  }
+  // ---- compartilhar recorde: imagem 1080×1080 com o mascote do troféu e a pontuação ----
+  const SITE_URL = 'https://jabdev-br.github.io/Refrigerantes-Jaboti/arcade/';
+  function imagemRecorde() {
+    const c = document.createElement('canvas'); c.width = c.height = 1080; const g = c.getContext('2d');
+    const bg = g.createRadialGradient(540, 470, 60, 540, 540, 780); bg.addColorStop(0, '#fff3a0'); bg.addColorStop(.45, '#ffb71a'); bg.addColorStop(1, '#d2321f');
+    g.fillStyle = bg; g.fillRect(0, 0, 1080, 1080);
+    g.save(); g.translate(540, 470); g.globalAlpha = .18; g.fillStyle = '#ffffff';
+    for (let i = 0; i < 18; i++) { g.rotate(TAU / 18); g.beginPath(); g.moveTo(0, 0); g.lineTo(-60, -900); g.lineTo(60, -900); g.fill(); }
+    g.restore();
+    const logo = IMG['logo-jaboti']; if (ok(logo)) { const lh = 90, lw = logo.naturalWidth * lh / logo.naturalHeight; g.drawImage(logo, 540 - lw / 2, 40, lw, lh); }
+    const txt = (s, y, size, fill, stroke, lw) => { g.font = `${size}px ${UI}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.lineJoin = 'round'; g.lineWidth = lw; g.strokeStyle = stroke; g.strokeText(s, 540, y); g.fillStyle = fill; g.fillText(s, 540, y); };
+    txt('JABOTI RUN', 220, 110, '#ffffff', '#063d27', 18);
+    if (ok(POSES_IMG)) { accOverlay('poses', 3, 240, 220, 600 / 420, true, loja.acc, g); g.drawImage(accImg('poses') || POSES_IMG, 3 * 420, 0, 420, 420, 540 - 300, 220, 600, 600); accOverlay('poses', 3, 240, 220, 600 / 420, false, loja.acc, g); }
+    txt(newBest ? 'MEU NOVO RECORDE' : 'MINHA PONTUAÇÃO', 850, 54, '#ffffff', '#7a1c10', 12);
+    txt(String(Math.floor(score)).padStart(5, '0'), 960, 130, '#fff07a', '#5a2e00', 20);
+    txt(`${Math.floor(dist / 50)} m  ·  ${caps} ${caps === 1 ? 'tampinha' : 'tampinhas'}`, 1012, 36, '#ffffff', '#7a1c10', 9);
+    txt('Consegue me superar? Jogue grátis!', 1060, 30, '#ffffff', '#7a1c10', 8);
+    return c;
+  }
+  function compartilhar() {
+    const c = imagemRecorde(), texto = `Fiz ${Math.floor(score)} pontos no Jaboti Run! Consegue me superar? Jogue: ${SITE_URL}`;
+    if (window.JabotiApp && JabotiApp.compartilhar) { try { JabotiApp.compartilhar(c.toDataURL('image/png'), texto); } catch (e) {} return; }
+    c.toBlob(b => {
+      const file = new File([b], 'jaboti-run-recorde.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], text: texto }).catch(() => {}); return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'jaboti-run-recorde.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('IMAGEM SALVA!', 'Mande o seu recorde para os amigos', '#7fd0ff');
+    }, 'image/png');
+  }
+  // ---- pausa automática ao sair do app / trocar de aba / receber ligação ----
+  const autoPausa = () => { if (state === 'running') togglePause(); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) autoPausa(); });
+  window.__appPausa = autoPausa;                      // chamado pelo app Android no onPause
+  // ---- tela MISSÕES E MEDALHAS (estado 'goals') ----
+  function drawGoals(mt) {
+    if (!missoes || missoes.dia !== hoje()) carregarMissoes();
+    ctx.fillStyle = 'rgba(2,10,7,.88)'; ctx.fillRect(0, -menuOY, W, H);
+    text3d('MISSÕES E MEDALHAS', W / 2, 52, 38, '#ffffff', '#ffe066', '#063d27', 5);
+    gameButton('back', 96, 40, 150, 42, '◀  VOLTAR', 'ghost');
+    walletChip(W - 160, 22);
+    // missões do dia
+    const L = 50, LW = 520;
+    ctx.font = `20px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#9bcb45'; ctx.fillText('🎯 MISSÕES DO DIA', L, 100);
+    missoes.lista.forEach((m, i) => {
+      const y = 112 + i * 64;
+      ctx.fillStyle = m.feito ? 'rgba(155,203,69,.18)' : 'rgba(255,255,255,.07)'; rr(L, y, LW, 54, 14); ctx.fill();
+      ctx.strokeStyle = m.feito ? '#9bcb45' : 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = `24px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(m.feito ? '✅' : '🎯', L + 28, y + 27);
+      ctx.textAlign = 'left'; ctx.font = `17px ${UI}`; ctx.fillStyle = '#ffffff'; ctx.fillText(missaoTxt(m), L + 54, y + 19);
+      ctx.fillStyle = 'rgba(255,255,255,.18)'; rr(L + 54, y + 33, 300, 10, 5); ctx.fill();
+      ctx.fillStyle = m.feito ? '#9bcb45' : '#ffd23a'; rr(L + 54, y + 33, 300 * clamp(m.prog / m.alvo, 0, 1), 10, 5); ctx.fill();
+      ctx.font = `13px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.8)'; ctx.fillText(`${Math.floor(m.prog)} / ${m.alvo}`, L + 362, y + 39);
+      ctx.textAlign = 'right'; ctx.font = `18px ${UI}`; ctx.fillStyle = m.feito ? '#9bcb45' : '#ffd23a'; ctx.fillText(m.feito ? 'GANHOU!' : `+${m.premio}`, L + LW - 16, y + 28);
+    });
+    const agora = new Date(), meia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1), falta = Math.max(0, meia - agora);
+    ctx.textAlign = 'left'; ctx.font = `14px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.65)';
+    ctx.fillText(`Novas missões em ${Math.floor(falta / 3600000)} h ${Math.floor(falta / 60000) % 60} min`, L, 320);
+    // medalhas
+    const R = 610, got = stats.got.length;
+    ctx.font = `20px ${UI}`; ctx.fillStyle = '#ffd23a'; ctx.fillText(`🏅 MEDALHAS  ${got}/${MEDALHAS.length}`, R, 100);
+    MEDALHAS.forEach((m, i) => {
+      const x = R + (i % 4) * 128, y = 110 + Math.floor(i / 4) * 54, tem = stats.got.includes(m.id);
+      ctx.fillStyle = tem ? 'rgba(255,210,58,.16)' : 'rgba(255,255,255,.05)'; rr(x, y, 122, 48, 12); ctx.fill();
+      ctx.strokeStyle = tem ? '#ffd23a' : 'rgba(255,255,255,.12)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.save(); if (!tem) ctx.globalAlpha = .45;
+      ctx.font = `22px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(tem ? '🏅' : '🔒', x + 20, y + 24);
+      const words = m.nome.split(' '), l1 = [], l2 = [];
+      ctx.font = `12px ${UI}`; words.forEach(w => (ctx.measureText([...l1, w].join(' ')).width < 88 && !l2.length ? l1 : l2).push(w));
+      ctx.textAlign = 'left'; ctx.fillStyle = tem ? '#ffffff' : '#cfd8d2';
+      ctx.fillText(l1.join(' '), x + 38, l2.length ? y + 15 : y + 18); if (l2.length) ctx.fillText(l2.join(' '), x + 38, y + 29);
+      ctx.fillStyle = tem ? '#9bcb45' : '#ffd23a'; ctx.font = `11px ${UI}`; ctx.fillText(tem ? 'GANHA' : `+${m.premio}`, x + 38, y + 41);
+      ctx.restore();
+    });
+  }
   const curSkin = () => SKINS.find(k => k.id === loja.cor) || SKINS[0];
   const skinKey = () => curSkin().tint ? 'skin_' + loja.cor : null;
   // no skate o acessório não aparece (as poses de skate ainda não têm acessório)
-  const accSheet = () => loja.loc !== 'skate' && loja.acc && ok(ACC_SHEET[loja.acc]) ? ACC_SHEET[loja.acc] : null;   // folha do mascote com o acessório
-  const accMortal = () => loja.loc !== 'skate' && loja.acc && ok(ACC_MORTAL[loja.acc]) ? ACC_MORTAL[loja.acc] : null;
+  const accSheet = () => accImg('base');     // folha a pé com o acessório (se o acessório tiver folhas próprias)
+  const accMortal = () => accImg('mortal');
   // skate: atlas de 7 células de 400 px só com o mascote (0 e 1 andando, 2 remando, 3 agachado, 4 ollie, 5 grab, 6 kickflip);
   // fruta em x 200 / y 216 em todas; nas poses do chão as rodinhas do skate ficam em y 372
   const SKATE_IMG = new Image(); SKATE_IMG.src = 'assets/mascote-skate.webp';
   const SKATE_ICON = new Image(); SKATE_ICON.src = 'assets/skate.webp';
   // o skate em si é UM desenho só (skate-shape), colado embaixo dos pés pelo código: deck = [centro x, topo da lixa y, ângulo] de cada pose
-  const SKATE_SHAPE = new Image(); SKATE_SHAPE.src = 'assets/skate-shape.webp';
-  const SK = { size: 400, cx: 200, fy: 216, bot: 372, shape: { w: 262, h: 64, top: 14 },
+  const SKATE_SHAPE = new Image(); SKATE_SHAPE.src = 'assets/skate-shape.webp';   // skate de lado 3D (ChatGPT, ferramentas/montar-pecas-veiculos.py)
+  // peças 3D dos veículos (folha do ChatGPT recortada por ferramentas/montar-pecas-veiculos.py); o código encaixa e gira cada uma
+  const VEI = {};
+  ['patinete-base', 'patinete-haste', 'patinete-guidao', 'patinete-roda',
+    'skate-baixo', 'skate-rodinha'].forEach(n => { const im = new Image(); im.src = `assets/veiculos/${n}.webp`; VEI[n] = im; });
+  // desenha a peça img ligando o segmento A→B da imagem (px) ao segmento a→b do veículo (unidades, y para cima); P(x, y) = projeção na tela.
+  // wf = escala na largura (perpendicular a A→B); src = [x, y, w, h] só um pedaço; clip = { pts: [[x, y]...] na imagem, out: fora }
+  // devolve a função que leva um ponto da imagem para o veículo (unidades)
+  function piece(img, P, A, B, a, b, wf = 1, src, clip) {
+    const iu = B[0] - A[0], iv = -(B[1] - A[1]), li = Math.hypot(iu, iv), lx = b[0] - a[0], ly = b[1] - a[1], ll = Math.hypot(lx, ly), s = ll / li;
+    const ex = iu / li, ey = iv / li, nx = -ey, ny = ex, fx = lx / ll, fy = ly / ll, gx = -fy, gy = fx;
+    const du = [s * (ex * fx + wf * nx * gx), s * (ex * fy + wf * nx * gy)], dv = [-s * (ey * fx + wf * ny * gx), -s * (ey * fy + wf * ny * gy)];
+    const o = [a[0] - A[0] * du[0] - A[1] * dv[0], a[1] - A[0] * du[1] - A[1] * dv[1]];
+    const toLocal = (u, v) => [o[0] + u * du[0] + v * dv[0], o[1] + u * du[1] + v * dv[1]];
+    if (!img || !(img instanceof HTMLCanvasElement || ok(img))) return toLocal;   // canvas = peça recolorida
+    const O = P(0, 0), X = P(1, 0), Y = P(0, 1), px = [X[0] - O[0], X[1] - O[1]], py = [Y[0] - O[0], Y[1] - O[1]];
+    const L = v => [v[0] * px[0] + v[1] * py[0], v[0] * px[1] + v[1] * py[1]], U = L(du), V = L(dv), T = L(o);
+    ctx.save(); ctx.transform(U[0], U[1], V[0], V[1], O[0] + T[0], O[1] + T[1]);
+    if (clip) { ctx.beginPath(); if (clip.out) ctx.rect(-1e4, -1e4, 2e4, 2e4); clip.pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.clip('evenodd'); }
+    if (src) ctx.drawImage(img, src[0], src[1], src[2], src[3], src[0], src[1], src[2], src[3]); else ctx.drawImage(img, 0, 0);
+    ctx.restore(); return toLocal;
+  }
+  // peça do patinete na cor escolhida (vermelho → base, amarelo da faixa → faixa), feita uma vez por cor e guardada
+  let scootPrev = null;                                                     // cor mostrada no cartão da loja (senão a equipada)
+  const curScoot = () => PATINETES.find(p => p.id === (scootPrev || loja.patinete)) || PATINETES[0];
+  const scootCache = {};
+  function scootImg(nome) {
+    const img = VEI[nome], S = curScoot();
+    if (S.id === 'pt_classico' || !ok(img)) return img;
+    const key = nome + '|' + S.id; if (scootCache[key]) return scootCache[key];
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const hsv = ([r, gg, b]) => { const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn; let h = 0;
+      if (d) h = mx === r ? ((gg - b) / d + 6) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; return [h * 60, mx ? d / mx : 0, mx / 255]; };
+    const rgb = (h, sa, v) => { const f = n => { const k = (n + h / 60) % 6; return 255 * (v - v * sa * Math.max(0, Math.min(k, 4 - k, 1))); }; return [f(5), f(3), f(1)]; };
+    const B = hsv(hex(S.base)), T = hsv(hex(S.stripe));
+    try {
+      const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+      for (let i = 0; i < px.length; i += 4) {
+        if (!px[i + 3]) continue;
+        const [h, sa, v] = hsv([px[i], px[i + 1], px[i + 2]]);
+        let C = null;
+        if ((h < 18 || h > 340) && sa > .25) C = B;                         // vermelho (base, pescoço, para-lama, manoplas, abraçadeira)
+        else if (h >= 36 && h <= 62 && sa > .45 && v > .55) C = T;           // faixa amarela
+        if (!C) continue;
+        const nv = Math.min(1, v / .86 * C[2]), ns = Math.min(1, sa / .92 * C[1]);
+        const o = rgb(C[0], C[1] < .08 ? C[1] : ns, C[2] < .25 ? Math.min(1, C[2] + v * .35) : nv);   // cor escura (preto): sobe um pouco com o brilho
+        px[i] = o[0]; px[i + 1] = o[1]; px[i + 2] = o[2];
+      }
+      g.putImageData(d, 0, 0);
+    } catch (e) { return img; }
+    return (scootCache[key] = c);
+  }
+  const SK = { size: 400, cx: 200, fy: 216, bot: 372, shape: { w: 262, h: 72, top: 19, edge: 34 },
     deck: [[195, 322, 0], [200, 322, 0], [205, 322, 0], [190, 322, 0], [222, 308, -.31], [195, 303, 0], [232, 342, 0],
       [208, 322, 0], [225, 322, 0], [196, 322, 0], [225, 322, 0]] };   // 7–10: grinds (50-50, nosegrind, 5-0, crooked)
   const skateOn = () => loja.loc === 'skate' && ok(SKATE_IMG) && ok(SKATE_SHAPE);
@@ -1349,7 +1711,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // células de 400 px (fruta 112 px, centro em 200,150): 0 em pé nos pedais, 1 agachado, 2 bunny hop, 3 superman, 4 no-hander, 5 tailwhip.
   // pes = ponto médio dos tênis (eixo do pedivela), ang = inclinação da linha dos pés, dist = distância entre eles,
   // maos = ponto das mãos (guidão); solto = pés fora dos pedais (a bicicleta se prende pelas mãos)
-  const BMX_IMG = new Image(); BMX_IMG.src = 'assets/mascote-bmx.webp';
+  const BMX_IMG = new Image();                                              // BMX fora do jogo: não baixa mais (src era assets/mascote-bmx.webp)
   const BX = { size: 400, poses: [
     { pes: [209, 255], ang: 0.585, dist: 30, maos: [275, 170] },
     { pes: [212, 224], ang: 0.000, dist: 0, maos: [241, 169] },
@@ -1371,7 +1733,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const g = c.getContext('2d'); g.drawImage(SKATE_SHAPE, 0, 0);
     try {
       const d = g.getImageData(0, 0, c.width, c.height), px = d.data, B = hex(S.base), T = hex(S.stripe);
-      for (let y = 0; y < Math.min(c.height, 32); y++) for (let x = 0; x < c.width; x++) {
+      for (let y = 0; y < Math.min(c.height, SK.shape.edge); y++) for (let x = 0; x < c.width; x++) {
         const i = (y * c.width + x) * 4, r = px[i], gg = px[i + 1], b = px[i + 2];
         if (!px[i + 3]) continue;
         let C = null, l = 1;
@@ -1456,9 +1818,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   let ghostPass = false;
   function drawSlide(ox, oy, tint) {
     const S = SLIDE, wob = Math.sin(t * 38) * .6, sway = Math.sin(t * 9) * 1.2;   // tremidinha de esforço e balanço de surfista
-    const A = ACCS.find(a => a.id === loja.acc), im = A && A.slide && ok(ACC_SLIDE[A.id]) ? ACC_SLIDE[A.id] : SLIDE_IMG;
+    const A = ACCS.find(a => a.id === loja.acc), im = accImg('desliza') || SLIDE_IMG;
     const cx = im === SLIDE_IMG ? S.cx : A.slide[0], sole = im === SLIDE_IMG ? S.sole : A.slide[1];
+    accOverlay('slide', 0, ox + sway - cx * S.s, oy + wob - sole * S.s, S.s, true);
     ctx.drawImage(tinted(im, tint), ox + sway - cx * S.s, oy + wob - sole * S.s, im.naturalWidth * S.s, im.naturalHeight * S.s);
+    accOverlay('slide', 0, ox + sway - cx * S.s, oy + wob - sole * S.s, S.s, false);
     if (state === 'running' && !ghostPass) S.heels.forEach(([hx, hy]) => {    // poeira saindo do calcanhar de cada tênis, rente ao chão
       if (Math.random() < .6) dust(ox + (hx - S.cx) * S.s, oy - (S.sole - hy) * S.s, 1, .55);
     });
@@ -1468,19 +1832,21 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const POSES_IMG = new Image(); POSES_IMG.src = 'assets/mascote-poses.webp';
   function drawPose(i, x, feetY, s = .5, rot = 0) {
     ctx.save(); ctx.translate(x, feetY); ctx.rotate(rot);
-    ctx.drawImage(tinted(POSES_IMG, skinKey()), i * 420, 0, 420, 420, -210 * s, -404 * s, 420 * s, 420 * s);
+    accOverlay('poses', i, -210 * s, -404 * s, s, true);
+    ctx.drawImage(tinted(accImg('poses') || POSES_IMG, skinKey()), i * 420, 0, 420, 420, -210 * s, -404 * s, 420 * s, 420 * s);
+    accOverlay('poses', i, -210 * s, -404 * s, s, false);
     ctx.restore();
   }
   function drawMascot() {
     if (useVector || !ok(SPRITES)) { drawMascotVector(); return; }
     if (ok(POSES_IMG)) {
-      if (state === 'ready' && !accSheet() && !wheels()) {        // menu inicial: acenando com a garrafa (com acessório ou skate, usa a folha dele)
+      if (state === 'ready' && !wheels()) {        // menu inicial: acenando com a garrafa (com acessório ou skate, usa a folha dele)
         ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(PX, GROUND + 3, 30, 5, 0, 0, TAU); ctx.fill();
         drawPose(1, PX, GROUND - Math.abs(Math.sin(t * 2.4)) * 4, .56, Math.sin(t * 2.4) * .03);
         return;
       }
       if (state === 'over' || state === 'shop') return;   // essas telas desenham o mascote por cima
-      if (state === 'dying' && player.deadT < .3 && !accSheet()) {   // instante da batida: achatado contra o obstáculo
+      if (state === 'dying' && player.deadT < .3) {   // instante da batida: achatado contra o obstáculo
         drawPose(0, PX + player.dx + 8, GROUND - player.y, .5);
         return;
       }
@@ -1513,7 +1879,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (fi >= 0) {                              // pose de manobra: gira em torno do centro do corpo
         ctx.save();
         ctx.translate(x, y - mid); ctx.rotate(r); ctx.scale(flip, 1);
+        accOverlay('mortal', fi, -105, -105, .5, true);
         ctx.drawImage(tinted(accMortal() || MORTAL_IMG, tint), fi * 420, 0, 420, 420, -105, -105, 210, 210);
+        accOverlay('mortal', fi, -105, -105, .5, false);
         ctx.restore();
         return;
       }
@@ -1521,7 +1889,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.translate(x, y);
       ctx.scale(P.sx, P.sy);                      // amassa e estica a partir dos pés
       ctx.translate(0, -mid); ctx.rotate(r); ctx.scale(flip * tuck, tuck); ctx.translate(0, mid);   // gira em torno do corpo
+      accOverlay('base', f, -cell.cx * k, -cell.feet * k, k, true);
       ctx.drawImage(sheet, sx, sy, cell.size, cell.size, -cell.cx * k, -cell.feet * k, cell.size * k, cell.size * k);
+      accOverlay('base', f, -cell.cx * k, -cell.feet * k, k, false);
       ctx.restore();
     };
     ctx.imageSmoothingQuality = APP ? 'medium' : 'high';
@@ -1572,6 +1942,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   function paintBottom(S) {
     const L = 131, Wd = 33;
     ctx.fillStyle = S.base; ctx.fillRect(-L, -Wd, 2 * L, 2 * Wd);
+    if (S.id === 'sh_classico' && ok(VEI['skate-baixo'])) { ctx.drawImage(VEI['skate-baixo'], -L, -Wd - 3, 2 * L, 2 * Wd + 6); return; }   // shape 3D de baixo
     if (!S.pat) { ctx.fillStyle = S.stripe; ctx.fillRect(-112, -9, 224, 18); return; }
     if (S.pat === 'jaboti') {
       ctx.fillStyle = S.stripe; ctx.fillRect(-L, -15, 2 * L, 30);
@@ -1623,6 +1994,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const wheels = [];
       [-B3.tx, B3.tx].forEach(tx => [-B3.tz, B3.tz].forEach(tz => wheels.push(P(tx, B3.wy, tz))));
       wheels.sort((a, b) => a[2] - b[2]).forEach(([x, y]) => {
+        const rw = B3.wr * k * 1.15;
+        if (ok(VEI['skate-rodinha'])) { ctx.save(); ctx.translate(x, y); ctx.rotate(al > .05 ? ang : 0); ctx.scale(al > .05 ? squash : 1, 1); ctx.drawImage(VEI['skate-rodinha'], -rw, -rw, 2 * rw, 2 * rw); ctx.restore(); return; }
         ctx.beginPath(); ctx.ellipse(x, y, B3.wr * k * (al > .05 ? squash : 1), B3.wr * k, al > .05 ? ang : 0, 0, TAU);
         ctx.fillStyle = '#f2c41f'; ctx.fill(); ctx.strokeStyle = '#8a6100'; ctx.lineWidth = 1.4 * k; ctx.stroke();
         ctx.beginPath(); ctx.arc(x, y, 3.2 * k, 0, TAU); ctx.fillStyle = '#9aa3ab'; ctx.fill();
@@ -1665,7 +2038,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
 
   function drawSkater(ox, oy, tint, X) {
-    const k = SP.scale, f = skaterFrame(), im = tinted(SKATE_IMG, tint), S2 = SK.size * k;
+    const k = SP.scale, f = skaterFrame(), im = tinted(accImg('skate') || SKATE_IMG, tint), S2 = SK.size * k;
     const tilt = player.ground ? Math.sin(t * 11) * .015 : clamp(-player.vy / 2600, -.18, .22);
     const bob = player.ground && state === 'running' ? Math.abs(Math.sin(t * 22)) * 1.2 : 0;
     const draw = (x, y, r, a) => {
@@ -1679,7 +2052,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (r) { const fy = (SK.bot - SK.fy) * k; ctx.translate(0, -fy); ctx.rotate(r); ctx.translate(0, fy); }   // gira em volta da fruta
       drawBoard(f, k);                                                       // o skate não balança
       ctx.translate(0, -bob - (player.grind ? Math.random() * 1.2 : 0));
+      accOverlay('skate', f, -SK.cx * k, -SK.bot * k, k, true);
       ctx.drawImage(im, f * SK.size, 0, SK.size, SK.size, -SK.cx * k, -SK.bot * k, S2, S2);
+      accOverlay('skate', f, -SK.cx * k, -SK.bot * k, k, false);
       ctx.restore();
     };
     const rot = (player.spin >= 0 ? X.rot : 0) + (player.ground ? 0 : tilt);
@@ -1698,8 +2073,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // z para perto da câmera. o: { bar: [x, y] guidão (entre as mãos), crank: ângulo do pedivela, spin: giro das rodas,
   //   whip: giro do quadro em volta do guidão (tailwhip) }
   const BMX_S = .8;                                                         // tamanho da BMX em relação à geometria BM
-  const BMX_RODA = new Image(); BMX_RODA.src = 'assets/bmx-roda.webp';   // roda recortada da BMX renderizada (ferramentas/roda-bmx-3d.py)
-  const BM = { R: 46, rear: -86, front: 86, bb: [-14, 44], seat: [-44, 116], head0: [58, 92], head1: [64, 118], crankL: 22, pitch: .3,
+  const BMX_RODA = new Image();                                             // (BMX fora do jogo; era assets/bmx-roda.webp)   // roda recortada da BMX renderizada (ferramentas/roda-bmx-3d.py)
+  const BM = { R: 46, rear: -86, front: 86, bb: [-9.4, 50.5], seat: [-31, 124], head0: [66.9, 95.3], head1: [57.1, 124.1], crankL: 22, pitch: .3,
     bar: [44, 150], frame: '#d7262b', frameDark: '#7a0f13', rim: '#f2c41f' };
   function drawBmx3D(k, o = {}) {
     const cp = Math.cos(BM.pitch), sp = Math.sin(BM.pitch), cw = Math.cos(o.whip || 0), sw = Math.sin(o.whip || 0), hx = BM.head0[0];
@@ -1715,6 +2090,28 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const chrome = (a, b, w) => { line(a, b, '#4a525a', w + 1.5); line(a, b, '#9aa3ab', w); line(off(a, -w * .15), off(b, -w * .15), '#e3e8ec', w * .55); line(off(a, -w * .28), off(b, -w * .28), '#ffffff', w * .18); };
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const spin = o.spin || 0, R = BM.R;
+    if (ok(VEI['bmx-quadro']) && ok(VEI['bmx-roda'])) {                    // peças 3D (ChatGPT) encaixadas pelo código
+      const PQ = (x, y) => P(x, y, 0, true), PF = (x, y) => P(x, y, 0, false), ca = o.crank || 0;
+      const ped = VEI['bmx-pedal'], pw = 15 * k, ph = 7.5 * k;
+      // pedivela: eixo no movimento central, linha dos pedais no ângulo ca (pontas medidas na imagem)
+      const crankAt = img => piece(img, PQ, [87.2, 39.2], [203.2, 59.2], BM.bb, [BM.bb[0] + Math.cos(ca) * 2 * BM.crankL, BM.bb[1] - Math.sin(ca) * 2 * BM.crankL]);
+      const cm = crankAt(null), pFar = PQ(...cm(20, 36)), pNear = PQ(...cm(136, 56));
+      if (ok(ped)) { ctx.save(); ctx.filter = 'brightness(.7)'; ctx.drawImage(ped, pFar[0] - pw / 2, pFar[1] - ph / 2, pw, ph); ctx.restore(); }   // pedal de longe
+      const wheel3 = (x, rot) => {
+        const [cx, cy] = P(x, R, 0, rot), sq = rot ? Math.max(.2, Math.abs(cw)) : 1, r = R * k;
+        ctx.save(); ctx.translate(cx, cy); ctx.scale(sq, 1); ctx.rotate(spin); ctx.drawImage(VEI['bmx-roda'], -r, -r * 1.0125, 2 * r, 2 * r * 1.0125); ctx.restore();
+        chrome(P(x, R, -8, rot), P(x, R, 12, rot), 5.5);                     // pino (peg)
+      };
+      wheel3(BM.rear, true); wheel3(BM.front, false);
+      const FORK = [[183, 38], [222, 38], [222, 114], [196, 114], [186, 62]];   // garfo (não gira no tailwhip)
+      piece(VEI['bmx-quadro'], PQ, [10, 102], [212.5, 103.5], [BM.rear, R], [BM.front, R], 1, null, { pts: FORK, out: true });
+      piece(VEI['bmx-quadro'], PF, [10, 102], [212.5, 103.5], [BM.rear, R], [BM.front, R], 1, null, { pts: FORK });
+      crankAt(VEI['bmx-pedivela']);
+      if (ok(ped)) ctx.drawImage(ped, pNear[0] - pw / 2, pNear[1] - ph / 2, pw, ph);                                                   // pedal de perto
+      const bar = o.bar || BM.bar;
+      piece(VEI['bmx-guidao'], PF, [95, 92.5], [95, 12.5], [BM.head1[0] - 1, BM.head1[1] + 4], bar, .7);                          // guidão (visto de lado, estreitado)
+      ctx.lineCap = 'butt'; return;
+    }
     const wheel = (x, rot) => {
       const [cx, cy] = P(x, R, 0, rot), sq = rot ? Math.max(.2, Math.abs(cw)) : 1, r = R * k;
       ctx.save(); ctx.translate(cx, cy); ctx.scale(sq, 1);
@@ -1794,7 +2191,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawBmx3D(kb, { bar, crank, spin: o.spin || 0, whip: o.whip || 0 });
     ctx.filter = f0 || 'none';
     BM.crankL = keep;
-    if (ok(BMX_IMG)) ctx.drawImage(tinted(BMX_IMG, tintKey), f * BX.size, 0, BX.size, BX.size, X0, Y0, BX.size * z, BX.size * z);
+    if (ok(BMX_IMG)) { accOverlay('bmx', f, X0, Y0, z, true); ctx.drawImage(tinted(accImg('bmx') || BMX_IMG, tintKey), f * BX.size, 0, BX.size, BX.size, X0, Y0, BX.size * z, BX.size * z); accOverlay('bmx', f, X0, Y0, z, false); }
   }
   function drawBmxRider(ox, oy, tint) {
     const k = SP.scale, f = bmxFrame(), T = player.spin >= 0 && player.trick && TRICKS[player.trick];
@@ -1827,7 +2224,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // ---------------- patinete desenhado em 3D ----------------
   // coordenadas do patinete: x para frente, y para cima, z para perto da câmera (px da célula de 400, origem no topo da base)
   const SCG = { half: 62, th: 9, w: 15, rear: -73, front: 86, ay: -12, r: 19, hx: 80, hy: 42, pitch: .3 };
-  function drawScooter(k, deck, bar, yaw = 0) {
+  function drawScooter(k, deck, bar, yaw = 0, spin = 0) {
     const [dcx, dcy, ang] = deck, ca = Math.cos(ang || 0), sa = Math.sin(ang || 0), cp = Math.cos(SCG.pitch), sp = Math.sin(SCG.pitch);
     const cyw = Math.cos(yaw), syw = Math.sin(yaw);
     const P = (x, y, z, rot) => {                                            // rot: parte que gira no tailwhip (base, pescoço, roda de trás)
@@ -1851,6 +2248,25 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     let bl;
     if (bar) { const dx = bar[0] - dcx, dy = bar[1] - dcy; bl = [dx * ca + dy * sa, -(-dx * sa + dy * ca) / cp]; }
     else bl = [SC.bar[0], SC.bar[1] / cp];
+    if (ok(VEI['patinete-base']) && ok(VEI['patinete-roda'])) {            // peças 3D (ChatGPT) encaixadas pelo código
+      const PR = (x, y) => P(x, y, 0, true), PN = (x, y) => P(x, y, 0, false);
+      const wheel3 = (x, rot) => {
+        const [wx, wy] = P(x, SCG.ay, 0, rot), sq = rot ? Math.max(.22, Math.abs(cyw)) : 1, r = SCG.r * k;
+        ctx.save(); ctx.translate(wx, wy); ctx.scale(sq, 1); ctx.rotate(spin); ctx.drawImage(VEI['patinete-roda'], -r, -r * 1.02, 2 * r, 2 * r * 1.02); ctx.restore();
+      };
+      wheel3(SCG.rear, true);
+      // haste: do eixo da frente até o guidão; garfo + abraçadeira (patinete-haste) embaixo, tubo do guidão em T por cima
+      const ax = [SCG.front, SCG.ay], dx = bl[0] - ax[0], dy = bl[1] - ax[1], len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+      const HS = .72, cTop = 68 * HS, at = d => [ax[0] + ux * d, ax[1] + uy * d];
+      const tb = [bl[0] - ux * 123.5 * HS, bl[1] - uy * 123.5 * HS];                // ponta de baixo do guidão em T
+      const rows = clamp(11 + (len - cTop + 4) / HS, 22, 134);
+      piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, 1, [0, 22, 152, rows - 22]);                      // tubo do T
+      piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, .42, [0, 0, 152, 22]);                               // barra com manoplas (de lado)
+      wheel3(SCG.front, false);
+      piece(scootImg('patinete-haste'), PN, [16, 159], [16, 91], ax, at(cTop), .75);                                                    // garfo + abraçadeira
+      piece(scootImg('patinete-base'), PR, [13, 59], [14, 59], [SCG.rear, SCG.ay], [SCG.rear + .829, SCG.ay]);                          // base com pescoço e para-lama
+      ctx.lineCap = 'butt'; return;
+    }
     const head = P(SCG.hx, SCG.hy, 0), hb = P(bl[0], bl[1], 0);
     wheel(SCG.rear, true); wheel(SCG.front, false);
     line([P(SCG.hx + 2, SCG.hy - 4, 0), P(SCG.front, SCG.ay, 0)], '#4e565e', 8); line([P(SCG.hx + 2, SCG.hy - 4, 0), P(SCG.front, SCG.ay, 0)], '#c9d0d6', 5);   // garfo
@@ -1890,14 +2306,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     let bar = P0.bar, deck = P0.deck || [P0.bar[0] - SC.bar[0], P0.bar[1] + SC.bar[1], 0];
     const shoeTop = deck[1] - 18, legs = shoeTop - SC_HIP, drop = crouch * legs * .8;   // canelas ficam com 20% da altura
     if (drop && bar) bar = [bar[0], bar[1] + drop];
-    drawScooter(k, deck, bar, yaw);
+    drawScooter(k, deck, bar, yaw, (dist || t * 300) / (SCG.r * k));
     if (!ok(SCOOT_IMG)) return;
-    const S2 = SC.size * k, im = tinted(SCOOT_IMG, tintKey), sx = f * SC.size, X0 = -SC.cx * k, Y0 = -SC.bot * k;
-    if (!drop) { ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); return; }
+    const S2 = SC.size * k, im = tinted(accImg('patinete') || SCOOT_IMG, tintKey), sx = f * SC.size, X0 = -SC.cx * k, Y0 = -SC.bot * k;
+    accOverlay('patinete', f, X0, Y0 + drop * k, k, true);
+    if (!drop) { ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); accOverlay('patinete', f, X0, Y0, k, false); return; }
     const cut = SC_HIP, bottom = SC.size;
     ctx.drawImage(im, sx, 0, SC.size, cut, X0, Y0 + drop * k, S2, cut * k);                         // corpo descendo inteiro
     ctx.drawImage(im, sx, cut, SC.size, legs, X0, Y0 + (cut + drop) * k, S2, (legs - drop) * k);       // canelas encolhidas
     ctx.drawImage(im, sx, shoeTop, SC.size, bottom - shoeTop, X0, Y0 + shoeTop * k, S2, (bottom - shoeTop) * k);   // tênis no lugar
+    accOverlay('patinete', f, X0, Y0 + drop * k, k, false);
   }
   function scooterFrame() {
     if (state === 'ready' || state === 'shop') return Math.floor(t * .8) % 2;
@@ -3196,6 +3614,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.fillStyle = '#b37d00'; ctx.font = '900 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('J', .5, 1);
     ctx.restore();
   }
+  // efeitos 3D (folha do ChatGPT, ferramentas/montar-efeitos.py): rastros, ícones dos poderes, anel do escudo, asinha, fagulha
+  const FX = {};
+  ['nota1', 'nota2', 'estrela', 'brilho', 'chama', 'bolha', 'escudo', 'ima', 'relogio', 'asa', 'raio', 'fagulha'].forEach(n => { const im = new Image(); im.src = `assets/efeitos/${n}.webp`; FX[n] = im; });
+  // desenha o efeito n centrado em (x, y) com o lado maior = tam; rot = giro; fx = espelha na horizontal; sy = achata na vertical
+  function fx(n, x, y, tam, rot = 0, flip = false, sy = 1) {
+    const im = FX[n]; if (!ok(im)) return false;
+    const k = tam / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
+    ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); if (flip || sy !== 1) ctx.scale(flip ? -1 : 1, sy);
+    ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore(); return true;
+  }
   function drawParticles() {
     particles.forEach(p => {
       const a = clamp(p.life / p.max, 0, 1);
@@ -3203,6 +3631,17 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       else if (p.type === 'spark') { ctx.globalAlpha = a; star(p.x, p.y, p.r * 1.6, p.color); ctx.globalAlpha = 1; }
       else if (p.type === 'ring') { ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * .45, 0, 0, TAU); ctx.stroke(); }
       else if (p.type === 'confetti') { ctx.save(); ctx.globalAlpha = Math.min(1, a * 2); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.r, -p.r * .4, p.r * 2, p.r * .8); ctx.restore(); }
+      else if (p.type === 'hexshard') {
+        ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.beginPath();
+        for (let i = 0; i < 6; i++) { const q = i * Math.PI / 3; i ? ctx.lineTo(Math.cos(q) * p.r, Math.sin(q) * p.r) : ctx.moveTo(p.r, 0); } ctx.closePath();
+        ctx.fillStyle = 'rgba(120,220,255,.45)'; ctx.fill(); ctx.strokeStyle = '#d6f6ff'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.restore();
+      }
+      else if (p.type === 'shockwave') { ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#9fe6ff'; ctx.lineWidth = 6 * a + 1; ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.stroke(); ctx.restore(); }
+      else if (p.type === 'ember') { ctx.globalAlpha = Math.min(1, a * 1.5); if (!fx('fagulha', p.x, p.y, p.r * 4, Math.atan2(p.vy, p.vx) + Math.PI, true)) star(p.x, p.y, p.r * 1.6, '#ffd23a'); ctx.globalAlpha = 1; }   // fagulha 3D virada para onde vai
+      else if (p.type === 'star3d') { ctx.globalAlpha = Math.min(1, a * 1.6); fx(p.br ? 'brilho' : 'estrela', p.x, p.y, p.r * 3.2 * (p.br ? .8 + Math.sin(t * 14 + p.ph) * .25 : 1), p.br ? 0 : t * 3 + p.ph); ctx.globalAlpha = 1; }
+      else if (p.type === 'bubble' && ok(FX.bolha)) { ctx.globalAlpha = Math.min(.8, a * 1.4); fx('bolha', p.x, p.y, p.r * 2.3, 0, false, 1 + Math.sin(t * 9 + p.ph) * .06); ctx.globalAlpha = 1; }
+      else if (p.type === 'note' && ok(FX.nota1)) { ctx.globalAlpha = Math.min(1, a * 1.5); fx(p.ch === '♪' ? 'nota1' : 'nota2', p.x, p.y, p.r * 1.1, Math.sin(t * 5 + p.ph) * .25); ctx.globalAlpha = 1; }
+      else if (p.type === 'flame' && ok(FX.chama)) { const r = Math.max(1, p.r); ctx.globalAlpha = Math.min(1, a * 1.3); fx('chama', p.x, p.y - r * .3, r * 2.4, Math.sin(p.ph + t * 12) * .12); ctx.globalAlpha = 1; }
       else if (p.type === 'bubble') {
         ctx.globalAlpha = Math.min(1, a * 1.6); ctx.strokeStyle = 'rgba(230,250,255,.9)'; ctx.lineWidth = 1.5; ctx.fillStyle = 'rgba(160,220,255,.18)';
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); ctx.stroke();
@@ -3246,8 +3685,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const yy = y0 + (Math.random() - .5) * 56;
       if (id === 'tr_bolhas') particles.push({ type: 'bubble', x: bx, y: yy, vx: drift + Math.random() * 40, vy: -25 - Math.random() * 40, life: 1.2, max: 1.2, r: 4 + Math.random() * 6, ph: Math.random() * TAU });
       else if (id === 'tr_notas') particles.push({ type: 'note', x: bx - 4, y: yy - 6, vx: drift, vy: -22 - Math.random() * 26, life: 1.4, max: 1.4, r: 22 + Math.random() * 8, ph: Math.random() * TAU, ch: Math.random() < .5 ? '♪' : '♫', color: pick(['#ffd23a', '#7fd0ff', '#ff6a5f', '#b8f06a']) });
-      else if (id === 'tr_estrelas') particles.push({ type: 'spark', x: bx, y: yy, vx: drift + (Math.random() - .5) * 30, vy: (Math.random() - .5) * 40, life: .9, max: .9, r: 4 + Math.random() * 3.5, color: pick(['#ffd23a', '#ffffff', '#fff3a6']) });
-      else if (id === 'tr_fogo') particles.push({ type: 'flame', x: bx + 6, y: y0 + 8 + (Math.random() - .5) * 40, vx: drift - Math.random() * 50, vy: -35 - Math.random() * 50, life: .55, max: .55, r: 11 + Math.random() * 8 });
+      else if (id === 'tr_estrelas') particles.push({ type: 'star3d', x: bx, y: yy, vx: drift + (Math.random() - .5) * 30, vy: (Math.random() - .5) * 40, life: .9, max: .9, r: 4 + Math.random() * 3.5, br: Math.random() < .4, ph: Math.random() * TAU });
+      else if (id === 'tr_fogo') particles.push({ type: 'flame', x: bx + 6, y: y0 + 8 + (Math.random() - .5) * 40, vx: drift - Math.random() * 50, vy: -35 - Math.random() * 50, life: .55, max: .55, r: 11 + Math.random() * 8, ph: Math.random() * TAU });
     } n -= 1; }
   }
   function drawRainbowTrail() {
@@ -3258,6 +3697,99 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.beginPath(); trailHist.forEach((h, j) => { const yy = h.y - 12 + i * 5; j ? ctx.lineTo(h.x, yy) : ctx.moveTo(h.x, yy); }); ctx.stroke();
     });
     ctx.restore();
+  }
+  // ---- escudo ----
+  const SH_R = 64;
+  // mede onde o mascote está DESENHADO agora (qualquer pose, manobra ou veículo): desenha num canvas pequeno e procura os pixels
+  // visíveis; o escudo usa o centro e o raio que cobrem tudo (cresce na hora, encolhe devagar)
+  const SHF = { c: null, g: null, x: 0, y: 0, r: SH_R, n: 0, ok: false };
+  function shieldFit(cy0) {
+    const Q = .25, WW = 320, HH = 320, top = GROUND - player.y - 250;          // janela do mundo em volta do mascote, a 1/4 do tamanho
+    if (!SHF.c) { SHF.c = document.createElement('canvas'); SHF.c.width = WW * Q; SHF.c.height = HH * Q; SHF.g = SHF.c.getContext('2d', { willReadFrequently: true }); }
+    if (SHF.ok && SHF.n++ % 2) return SHF;
+    const g = SHF.g, real = ctx, gp = ghostPass;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, SHF.c.width, SHF.c.height);
+    g.setTransform(Q, 0, 0, Q, -(PX - WW / 2) * Q, -top * Q);
+    ctx = g; ghostPass = true;
+    try { drawMascot(); } catch (e) {} finally { ctx = real; ghostPass = gp; g.filter = 'none'; g.globalAlpha = 1; }
+    let d; try { d = g.getImageData(0, 0, SHF.c.width, SHF.c.height).data; } catch (e) { return SHF; }
+    const w = SHF.c.width, h = SHF.c.height; let x1 = w, x2 = -1, y1 = h, y2 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 60) { if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y; }
+    if (x2 < 0) return SHF;
+    const cx = (x1 + x2 + 1) / 2, cyy = (y1 + y2 + 1) / 2; let m = 0;
+    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) if (d[(y * w + x) * 4 + 3] > 60) { const dd = (x + .5 - cx) ** 2 + (y + .5 - cyy) ** 2; if (dd > m) m = dd; }
+    const wx = PX - WW / 2 + cx / Q, wy = top + cyy / Q, wr = Math.sqrt(m) / Q + 10;
+    if (!SHF.ok) { SHF.x = wx; SHF.y = wy; SHF.r = Math.max(SH_R, wr); SHF.ok = true; }
+    else { SHF.x = lerp(SHF.x, wx, .6); SHF.y = lerp(SHF.y, wy, .6); SHF.r = wr > SHF.r ? wr : lerp(SHF.r, Math.max(SH_R, wr), .12); }
+    return SHF;
+  }
+  let shieldTexC = null;
+  function shieldTex() {                                                     // cúpula de hexágonos feita uma vez (canvas), mais forte na borda
+    if (shieldTexC) return shieldTexC;
+    const R = SH_R * 2, S = 2 * R + 8, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d'), o = S / 2, hs = 15;                        // hs = raio do hexágono (canvas em 2× para ficar nítido)
+    g.strokeStyle = 'rgba(170,240,255,1)'; g.lineWidth = 2.6;
+    for (let row = -12; row <= 12; row++) for (let col = -12; col <= 12; col++) {
+      const x = o + col * hs * 1.5, y = o + row * hs * Math.sqrt(3) + (col % 2 ? hs * Math.sqrt(3) / 2 : 0);
+      const d = Math.hypot(x - o, y - o); if (d > R + hs) continue;
+      const bulge = 1 - Math.pow(d / R, 2) * .35;                            // hexágonos encolhem perto da borda (parece esfera)
+      g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; const px = o + (x - o) * (1 - .12 * d / R) + Math.cos(a) * hs * .86 * bulge, py = o + (y - o) * (1 - .12 * d / R) + Math.sin(a) * hs * .86 * bulge; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.closePath(); g.stroke();
+    }
+    g.globalCompositeOperation = 'destination-in';                            // efeito "fresnel": some no meio, forte na borda
+    const m = g.createRadialGradient(o, o, 0, o, o, R);
+    m.addColorStop(0, 'rgba(0,0,0,.06)'); m.addColorStop(.55, 'rgba(0,0,0,.18)'); m.addColorStop(.85, 'rgba(0,0,0,.75)'); m.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = m; g.beginPath(); g.arc(o, o, R, 0, TAU); g.fill();
+    return (shieldTexC = c);
+  }
+  // anel 3D (folha do ChatGPT) inclinado em órbita; front = metade da frente (embaixo) ou de trás (em cima)
+  function shieldOrbit(F, front) {
+    const im = FX.escudo; if (!ok(im)) return;
+    const w = F.r * 2.7, h = w * im.naturalHeight / im.naturalWidth, tilt = -.32 + Math.sin(t * 1.3) * .06;
+    ctx.save(); ctx.translate(F.x, F.y + F.r * .06); ctx.rotate(tilt);
+    ctx.beginPath(); front ? ctx.rect(-200, 0, 400, 200) : ctx.rect(-200, -200, 400, 200); ctx.clip();
+    ctx.scale(1, .26); ctx.rotate(t * 2.2); ctx.globalAlpha = front ? .95 : .55;
+    ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore();
+  }
+  function drawShield(F) {
+    const r = F.r + Math.sin(t * 6) * 1.8, x = F.x, y = F.y;
+    ctx.save();
+    // corpo da bolha: quase transparente no meio, ciano na borda
+    const g = ctx.createRadialGradient(x - r * .3, y - r * .35, r * .1, x, y, r);
+    g.addColorStop(0, 'rgba(255,255,255,.18)'); g.addColorStop(.6, 'rgba(110,210,255,.07)'); g.addColorStop(.88, 'rgba(90,200,255,.22)'); g.addColorStop(1, 'rgba(160,235,255,.55)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    // hexágonos girando devagar
+    ctx.save(); ctx.translate(x, y); ctx.rotate(t * .35); ctx.globalAlpha = .7 + Math.sin(t * 4) * .15;
+    const T = shieldTex(), sz = r * 2 + 4; ctx.drawImage(T, -sz / 2, -sz / 2, sz, sz); ctx.restore();
+    // faixa de luz varrendo a bolha a cada 2,4 s
+    const ph = (t % 2.4) / 2.4;
+    if (ph < .45) {
+      const k = ph / .45, bx = x - r * 1.6 + k * r * 3.2;
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
+      const lg = ctx.createLinearGradient(bx - 22, y - 22, bx + 22, y + 22);
+      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(.5, `rgba(220,250,255,${.45 * Math.sin(k * Math.PI)})`); lg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = lg; ctx.fillRect(x - r, y - r, r * 2, r * 2); ctx.restore();
+    }
+    // borda brilhante com halo
+    ctx.shadowColor = 'rgba(80,210,255,.9)'; ctx.shadowBlur = 14;
+    ctx.strokeStyle = 'rgba(190,245,255,.95)'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(x, y, r - 6, Math.PI * 1.08, Math.PI * 1.42); ctx.stroke();                      // reflexo grande em cima à esquerda
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r - 6, Math.PI * .12, Math.PI * .26); ctx.stroke();     // reflexo pequeno embaixo à direita
+    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - r * .5, y - r * .62, 7, 3.5, -.7, 0, TAU); ctx.fill();
+    ctx.restore();
+    shieldOrbit(F, true);
+    for (let i = 0; i < 3; i++) {                                              // brilhinhos na superfície
+      const a = t * .9 + i * TAU / 3, k = .6 + Math.sin(t * 7 + i * 2) * .4;
+      ctx.save(); ctx.globalAlpha = k; fx('brilho', x + Math.cos(a) * r * .92, y + Math.sin(a) * r * .92, 10 + k * 8); ctx.restore();
+    }
+  }
+  // escudo segurou a batida: estoura em cacos de hexágono + onda
+  function shieldBurst() {
+    const cx = SHF.ok ? SHF.x : PX, cy = SHF.ok ? SHF.y : GROUND - player.y - 58, R = SHF.ok ? SHF.r : SH_R;
+    for (let i = 0; i < 16; i++) { const a = i / 16 * TAU + Math.random() * .3, v = 220 + Math.random() * 200;
+      particles.push({ type: 'hexshard', x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .6, max: .6, r: 5 + Math.random() * 4, rot: Math.random() * TAU, vr: (Math.random() - .5) * 14 }); }
+    particles.push({ type: 'shockwave', x: cx, y: cy, life: .4, max: .4, r: R });
   }
   function drawPlayerFx() {
     const cy = GROUND - player.y - 58, live = state === 'running' || state === 'paused';
@@ -3277,7 +3809,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         ctx.beginPath(); ctx.moveTo(PX - 34, yy); ctx.lineTo(PX - 34 - len, yy); ctx.stroke();
       }
       ctx.restore();
-      if (Math.random() < .5) particles.push({ type: 'spark', x: PX - 26, y: cy + (Math.random() - .5) * 60, vx: -160 - Math.random() * 120, vy: (Math.random() - .5) * 40, life: .35, max: .35, r: 2 + Math.random() * 2, color: Math.random() < .5 ? '#ffd23a' : '#fff3a6' });
+      if (Math.random() < .5) particles.push({ type: 'ember', x: PX - 26, y: cy + (Math.random() - .5) * 60, vx: -160 - Math.random() * 120, vy: (Math.random() - .5) * 40, life: .35, max: .35, r: 3 + Math.random() * 2.5 });
       ghostPass = true;                            // cópias do rastro: só desenham, sem rastro de manobra nem poeira
       for (let i = 3; i >= 1; i--) { ctx.save(); ctx.globalAlpha = .1 * (4 - i); ctx.translate(-i * 20, 0); drawMascot(); ctx.restore(); }
       ghostPass = false;
@@ -3293,6 +3825,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const an = t * 1.6 + i * TAU / 5; star(PX + Math.cos(an) * 46, cy + Math.sin(an) * 22 - 6, 2.5 + Math.sin(t * 6 + i) * 1.2, i % 2 ? '#d8c8ff' : '#ffffff');
     }
     if (loja.rastro === 'tr_arco' && live && trailHist.length > 2) drawRainbowTrail();
+    // escudo: metade de trás do anel em órbita (a cúpula e a metade da frente vêm depois do mascote)
+    const shieldOn = skills.escudo > 0 && live && !(skills.escudo < 2 && Math.floor(t * 10) % 2);
+    if (!shieldOn) SHF.ok = false;
+    const SF = shieldOn ? shieldFit(cy) : null;                                // centro e raio que cobrem o mascote desenhado agora
+    if (shieldOn) shieldOrbit(SF, false);
     // pisca durante a invencibilidade
     const rainbow = SK2.fx === 'arcoiris' && 'filter' in ctx;
     if (rainbow) ctx.filter = `hue-rotate(${(t * 140) % 360}deg) saturate(1.3)`;
@@ -3316,21 +3853,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
     // pontos x2: duas estrelinhas amarelas girando em volta
     if (skills.dobro > 0) for (let i = 0; i < 2; i++) {
-      const a = t * 4 + i * Math.PI; star(PX + Math.cos(a) * 50, cy + Math.sin(a) * 22 - 10, 7, '#fff05a');
+      const a = t * 4 + i * Math.PI, x = PX + Math.cos(a) * 50, y = cy + Math.sin(a) * 22 - 10;
+      if (!fx('estrela', x, y, 20 + Math.sin(a) * 4, t * 5)) star(x, y, 7, '#fff05a');
     }
-    // escudo da Cola: bolha em volta do mascote
-    if (skills.escudo > 0) {
-      const r = 62 + Math.sin(t * 6) * 2, end = skills.escudo < 2 && Math.floor(t * 10) % 2;
-      if (!end) {
-        ctx.save();
-        const g = ctx.createRadialGradient(PX - 18, cy - 22, 6, PX, cy, r);
-        g.addColorStop(0, 'rgba(255,255,255,.35)'); g.addColorStop(.7, 'rgba(127,208,255,.12)'); g.addColorStop(1, 'rgba(127,208,255,.45)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(PX, cy, r, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(200,240,255,.8)'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.beginPath(); ctx.ellipse(PX - 24, cy - 32, 12, 6, -.6, 0, TAU); ctx.fill();
-        ctx.restore();
-      }
-    }
+    // escudo da Cola: cúpula de energia (hexágonos fortes na borda, quase invisíveis no meio), borda brilhante, faixa de luz, anel na frente
+    if (shieldOn) drawShield(SF);
+    // ícones 3D dos poderes flutuando acima da cabeça (ímã, relógio do lento, raio do turbo)
+    { const ic = [skills.ima > 0 && 'ima', skills.lento > 0 && 'relogio', skills.turbo > 0 && 'raio'].filter(Boolean);
+      const top = cy - 118 - (wheels() ? 22 : 0) - (player.slide && player.ground ? -26 : 0);
+      ic.forEach((n, i) => { const x = PX - (ic.length - 1) * 19 + i * 38, bob = Math.sin(t * 4 + i * 1.7) * 4, end = skills[{ ima: 'ima', relogio: 'lento', raio: 'turbo' }[n]] < 2 && Math.floor(t * 10) % 2;
+        if (!end) fx(n, x, top + bob, 34, n === 'relogio' ? Math.sin(t * 3) * .3 : Math.sin(t * 2 + i) * .1); }); }
+    // pulo triplo: asinha batendo atrás dos tênis
+    if (skills.pulo > 0) fx('asa', PX - 30, GROUND - player.y - 30 - (wheels() ? 26 : 0), 50, -.25, true, .75 + Math.sin(t * (player.ground ? 8 : 22)) * .25);
     // pulo triplo: faíscas verdes nos tênis e anel verde ao sair do chão
     if (skills.pulo > 0 && state === 'running' && !player.ground && player.vy > 600 && Math.random() < .5) ring(PX, GROUND - player.y, '#96f05a');
     if (skills.pulo > 0 && state === 'running' && Math.random() < .45) particles.push({ type: 'spark', x: PX + (Math.random() - .5) * 30, y: GROUND - player.y - 4, vx: (Math.random() - .5) * 40, vy: 30, life: .4, max: .4, r: 2, color: '#b8f06a' });
@@ -3370,7 +3904,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const pad = n => String(n).padStart(5, '0');
     const show = flash === 0 || Math.floor(flash * 10) % 2 === 0;
     const ink = dark > .5 || biomeWeights().fabrica > .5 ? '#eaf5e9' : '#063d27';   // claro à noite e no teto escuro da fábrica
-    if (state === 'ready' || state === 'over' || state === 'shop' || state === 'rank') return;   // nos menus o painel já mostra pontos e recorde
+    if (state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals') return;   // nos menus o painel já mostra pontos e recorde
     ctx.textAlign = 'right';
     ctx.globalAlpha = .6; ctx.fillStyle = ink; ctx.fillText('HI ' + pad(best), W - 130, 16); ctx.globalAlpha = 1;
     if (show) { ctx.fillStyle = skills.dobro > 0 ? SKILLS.dobro.color : ink; ctx.fillText(pad(score), W - 20, 16); }
@@ -3381,7 +3915,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       drawSkillHud(ink);
     }
     drawCombo();
-    if (state === 'running') drawPowerBanner();
+    if (state === 'running') { drawPowerBanner(); drawTutorial(); }
     texts.forEach(x => {
       ctx.globalAlpha = clamp(x.life * 2, 0, 1);
       ctx.font = '900 18px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -3479,7 +4013,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function menu() {
     menuButtons = [];
-    if (state !== 'ready' && state !== 'paused' && state !== 'over' && state !== 'shop' && state !== 'rank') { menuState = ''; return; }
+    if (state !== 'ready' && state !== 'paused' && state !== 'over' && state !== 'shop' && state !== 'rank' && state !== 'goals') { menuState = ''; return; }
     if (state !== menuState) { menuState = state; menuStart = t; }
     const mt = t - menuStart, cx = W / 2;
     ctx.save();
@@ -3503,6 +4037,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       gameButton('shop', 96, 40, 150, 42, '🛒  LOJA', 'ghost');
       walletChip(186, 22);
       if (RANK_ON) gameButton('rank', 96, 92, 150, 42, '🏆  RANKING', 'ghost');
+      gameButton('goals', 96, RANK_ON ? 144 : 92, 150, 42, '🎯  MISSÕES', 'ghost');
+      { const pend = (missoes ? missoes.lista : []).filter(m => !m.feito).length; if (pend) { const bx = 96 + 66, by = (RANK_ON ? 144 : 92) - 18; ctx.fillStyle = '#ff5a4f'; ctx.beginPath(); ctx.arc(bx, by, 10, 0, TAU); ctx.fill(); ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(pend, bx, by + 1); } }
       // garrafas = poderes
       ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = 'rgba(234,245,233,.75)';
       ctx.fillText('BEBA AS GARRAFAS E GANHE PODERES', cx, 210);
@@ -3523,6 +4059,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
 
     if (state === 'shop') drawShop(mt);
     if (state === 'rank') drawRank(mt);
+    if (state === 'goals') drawGoals(mt);
 
     if (state === 'paused') {
       ctx.fillStyle = 'rgba(2,10,7,.6)'; ctx.fillRect(0, -menuOY, W, H);
@@ -3549,7 +4086,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       statChip(ox - 160, 186, 140, 'RECORDE', String(best).padStart(5, '0'), '#ffd23a', '🏆');
       statChip(ox, 186, 140, 'TAMPINHAS', caps, '#ffd84a', 'cap');
       statChip(ox + 160, 186, 140, 'DISTÂNCIA', Math.floor(dist / 50) + ' m', '#7fd0ff');
-      if (accSheet()) {                                     // com acessório: a própria folha (aceno no recorde, tonto no fim comum)
+      if (false) {                                          // (antigo) com acessório usava a folha a pé; agora as poses especiais têm o acessório
         const pk = easeOut((mt - .1) / .5), fr = newBest ? 22 : 19, z = .95 * pk, sh = tinted(accSheet(), skinKey());
         ctx.drawImage(sh, (fr % 8) * 256, Math.floor(fr / 8) * 256, 256, 256, 135 - 128 * z, GROUND + 6 - menuOY - 246 * z, 256 * z, 256 * z);
       } else if (ok(POSES_IMG)) {                          // mascote em destaque: troféu no recorde, tonto no fim comum
@@ -3558,15 +4095,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         else drawPose(2, 135, GROUND + 6 - menuOY, .62 * pk, Math.sin(t * 2.6) * .05);
       }
       if (player.deadT > 1.1) {
-        gameButton('again', ox - 70, 284, 230, 54, '↻  JOGAR DE NOVO', 'yellow', true);
-        gameButton('menu', ox + 118, 284, 110, 46, 'MENU', 'ghost');
+        // continuar gastando tampinhas (1 vez por partida); sem saldo, o botão mostra quanto falta
+        if (!continued) gameButton('cont', ox, 254, 300, 44, loja.carteira >= CONT_PRECO ? `▶  CONTINUAR  ·  ${CONT_PRECO} TAMPINHAS` : `CONTINUAR: FALTAM ${CONT_PRECO - loja.carteira} TAMPINHAS`, loja.carteira >= CONT_PRECO ? 'yellow' : 'ghost', loja.carteira >= CONT_PRECO);
+        gameButton('again', ox - 150, 308, 230, 50, '↻  JOGAR DE NOVO', continued || loja.carteira < CONT_PRECO ? 'yellow' : 'ghost', continued || loja.carteira < CONT_PRECO);
+        gameButton('menu', ox + 30, 308, 110, 44, 'MENU', 'ghost');
+        gameButton('share', ox + 190, 308, 190, 44, '📤 COMPARTILHAR', 'ghost');
         if (RANK_ON && score > 0) {
-          if (!rankSent) gameButton('send', ox + 300, 284, 220, 46, '🏆 ENVIAR RANKING', 'ghost');
+          if (!rankSent) gameButton('send', ox + 395, 308, 200, 44, '🏆 ENVIAR RANKING', 'ghost');
           else {
             ctx.font = `16px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillStyle = rankSent.ok ? '#9bcb45' : rankSent.wait ? '#eaf5e9' : '#ff8a7a';
-            ctx.fillText(rankSent.msg, ox + 300, 286);
-            if (rankSent.ok) gameButton('rank', ox + 300, 322, 150, 34, 'VER RANKING', 'ghost');
+            ctx.fillText(rankSent.msg, ox + 395, 298);
+            if (rankSent.ok) gameButton('rank', ox + 395, 334, 150, 30, 'VER RANKING', 'ghost');
           }
         }
       } else { ctx.font = `16px ${UI}`; ctx.fillStyle = '#9bcb45'; ctx.fillText('Bebeu, reciclou!', ox, 290); }
@@ -3604,14 +4144,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     } else if (skateOn()) {
       const z = .62, fr = Math.floor(t * 1.2) % 2;
       ctx.save(); ctx.translate(pv, 310); drawBoard(fr, z); ctx.restore();
-      ctx.drawImage(tinted(SKATE_IMG, skinKey()), fr * SK.size, 0, SK.size, SK.size, pv - SK.cx * z, 310 - SK.bot * z, SK.size * z, SK.size * z);
-    } else if (ok(SPRITES)) {
-      const X0 = pv - SP.cx * k, Y0 = 306 - SP.feet * k;
-      ctx.drawImage(sheet, (f % 8) * SP.size, Math.floor(f / 8) * SP.size, SP.size, SP.size, X0, Y0, SP.size * k, SP.size * k);
+      accOverlay('skate', fr, pv - SK.cx * z, 310 - SK.bot * z, z, true);
+      ctx.drawImage(tinted(accImg('skate') || SKATE_IMG, skinKey()), fr * SK.size, 0, SK.size, SK.size, pv - SK.cx * z, 310 - SK.bot * z, SK.size * z, SK.size * z);
+      accOverlay('skate', fr, pv - SK.cx * z, 310 - SK.bot * z, z, false);
+    } else if (ok(accImg('poses') || POSES_IMG)) {
+      // a pé: pose "acenando" (a mesma da tela inicial; com acessório, a versão gerada JÁ com ele), balançando de leve
+      ctx.save(); ctx.translate(0, -Math.abs(Math.sin(t * 2.4)) * 3); drawPose(1, pv, 306, .82, Math.sin(t * 2.4) * .03); ctx.restore();
     }
     ctx.filter = 'none';
     // abas (categorias)
-    const gx = cx - 150, TABS = [['personagem', 'PERSONAGEM'], ['acessorios', 'ACESSÓRIOS'], ['locomocao', 'LOCOMOÇÃO'], ['shapes', 'SKATES'], ['rastros', 'RASTROS']];
+    const gx = cx - 150, TABS = [['personagem', 'PERSONAGEM'], ['acessorios', 'ACESSÓRIOS'], ['locomocao', 'VEÍCULOS'], ['rastros', 'RASTROS']];
     TABS.forEach(([id, nome], i) => {
       const x = gx + i * 100, on = shopTab === id;
       ctx.fillStyle = on ? '#ffd23a' : 'rgba(255,255,255,.1)'; rr(x, 82, 92, 30, 15); ctx.fill();
@@ -3621,10 +4163,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       menuButtons.push({ id: 'tab:' + id, x, y: 82 + menuOY, w: 92, h: 30 });
     });
     // cartões
-    const card = (id, x, y, nome, preco, tem, usando, icon) => {
+    const card = (id, x, y, nome, preco, tem, usando, icon, travado) => {
       ctx.fillStyle = usando ? 'rgba(255,214,58,.18)' : 'rgba(255,255,255,.08)'; rr(x, y, 92, 104, 14); ctx.fill();
       ctx.strokeStyle = usando ? '#ffd23a' : 'rgba(255,255,255,.22)'; ctx.lineWidth = usando ? 3 : 1.5; ctx.stroke();
+      if (travado) ctx.globalAlpha = .38;
       ctx.save(); icon(x + 46, y + 40); ctx.restore();
+      if (travado) {                                                          // cor de veículo ainda não comprado: cadeado
+        ctx.globalAlpha = 1; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+        ctx.font = `22px system-ui,sans-serif`; ctx.fillText('🔒', x + 46, y + 48);
+        ctx.font = `${nome.length > 8 ? 11 : 12}px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.6)'; ctx.fillText(nome, x + 46, y + 78);
+        ctx.font = `11px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.6)'; ctx.fillText('BLOQUEADO', x + 46, y + 96);
+        menuButtons.push({ id, x, y: y + menuOY, w: 92, h: 104 }); return;
+      }
       ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.font = `${nome.length > 8 ? 11 : 12}px ${UI}`; ctx.fillStyle = '#eaf5e9'; ctx.fillText(nome, x + 46, y + 78);
       ctx.font = `13px ${UI}`;
       if (usando) { ctx.fillStyle = '#ffd23a'; ctx.fillText('✓ EM USO', x + 46, y + 96); }
@@ -3649,26 +4199,49 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     });
     else if (shopTab === 'acessorios') grid(ACCS, 'acc', loja.acc, (ac, x, y) => {
       if (!ac.id) { none(x, y); return; }
-      const sh = ACC_SHEET[ac.id]; if (!ok(sh)) return;
-      const fr = 20, z = .36;                                                // cabeça do mascote usando o acessório
-      ctx.drawImage(tinted(sh, skinKey()), (fr % 8) * 256 + 50, Math.floor(fr / 8) * 256 + 20, 156, 140, x - 156 * z / 2, y - 140 * z / 2 - 4, 156 * z, 140 * z);
+      // ícone: cabeça da pose "acenando" gerada JÁ com o acessório (sem folhas próprias: pose sem acessório + peça 3D encaixada)
+      const im = accImg('poses', ac.id) || POSES_IMG; if (!ok(im)) return;
+      const z = .33, X0 = 115, Y0 = 137, CW = 190, CH = 163, ox = x - (210.3 - X0) * z, oy = y + 6 - (250.7 - Y0) * z;
+      accOverlay('poses', 1, ox - X0 * z, oy - Y0 * z, z, true, ac.id);
+      ctx.drawImage(tinted(im, skinKey()), 420 + X0, Y0, CW, CH, ox, oy, CW * z, CH * z);
+      accOverlay('poses', 1, ox - X0 * z, oy - Y0 * z, z, false, ac.id);
     });
-    else if (shopTab === 'locomocao') grid(LOCS, 'loc', loja.loc, (it, x, y) => {
-      if (it.id === 'bmx') { ctx.translate(x, y + 24); drawBmx3D(.28, { spin: t * 4 }); return; }
-      if (it.id === 'patinete') { ctx.translate(x - 4, y + 24); drawScooter(.3, [SC.cx, SC.bot - 31, 0], null, Math.sin(t * 1.2) * .5, 0); return; }
-      if (it.id === 'skate') { if (ok(SKATE_ICON)) { const w = 74, h = w * SKATE_ICON.naturalHeight / SKATE_ICON.naturalWidth; ctx.drawImage(SKATE_ICON, x - w / 2, y - h / 2 - 2, w, h); } return; }
-      if (!ok(SPRITES)) return; const fr = Math.floor(t * 10) % 10, z = .3;   // correndo
-      ctx.drawImage(tinted(SPRITES, skinKey()), (fr % 8) * 256, Math.floor(fr / 8) * 256, 256, 256, x - 128 * z, y + 26 - 246 * z, 256 * z, 256 * z);
-    });
-    else if (shopTab === 'shapes') grid(SHAPES, 'shape', loja.shape, (S, x, y) => {
-      ctx.translate(x, y - 4); ctx.rotate(-.12); drawBoard3D(.3, -Math.PI * .78 + Math.sin(t * 1.5) * .12, .18, S);   // mostra o fundo (estampa)
-    });
+    else if (shopTab === 'locomocao') {
+      // 1º passo: o veículo (em cima). 2º passo: as cores DO veículo escolhido (embaixo), travadas até comprar o veículo
+      const veh = shopVeh, temV = loja.tem.includes(veh);
+      ctx.font = `13px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#ffd23a';
+      ctx.fillText('1  ESCOLHA O VEÍCULO', gx, 127);
+      LOCS.forEach((it, i) => {
+        const x = gx + i * 100, y = 133;
+        card('loc:' + it.id, x, y, it.nome, it.preco, !it.preco || loja.tem.includes(it.id), loja.loc === it.id, (x, y) => {
+          if (it.id === 'patinete') { scootPrev = loja.patinete; ctx.translate(x - 6, y + 30); drawScooter(.4, [SC.cx, SC.bot - 31, 0], null, Math.sin(t * 1.2) * .5, 0); scootPrev = null; return; }
+          if (it.id === 'skate') { const B = SK.shape, w = 78, h = w * B.h / B.w; ctx.drawImage(shapeImg(), x - w / 2, y - h / 2 + 2, w, h); return; }
+          if (!ok(SPRITES)) return; const fr = Math.floor(t * 10) % 6, z = .3;   // correndo
+          ctx.drawImage(tinted(SPRITES, skinKey()), (fr % 8) * 256, Math.floor(fr / 8) * 256, 256, 256, x - 128 * z, y + 26 - 246 * z, 256 * z, 256 * z);
+        });
+        if (it.id === veh) {                                                 // setinha: as cores abaixo são deste veículo
+          ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.moveTo(x + 38, y + 108); ctx.lineTo(x + 54, y + 108); ctx.lineTo(x + 46, y + 116); ctx.fill();
+        }
+      });
+      // explicação ao lado dos veículos
+      ctx.font = `13px ${UI}`; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(234,245,233,.7)';
+      ['Toque no veículo para', 'comprar ou usar.', 'Depois escolha a cor', 'dele logo abaixo.'].forEach((l, i) => ctx.fillText(l, gx + 312, 166 + i * 18));
+      const nomeV = veh === 'skate' ? 'SKATE' : 'PATINETE', LST = veh === 'skate' ? SHAPES : PATINETES, kind = veh === 'skate' ? 'shape' : 'pat';
+      const sel = veh === 'skate' ? loja.shape : loja.patinete;
+      ctx.fillStyle = temV ? '#ffd23a' : 'rgba(234,245,233,.55)';
+      ctx.fillText(temV ? `2  CORES DO ${nomeV}` : `2  CORES DO ${nomeV}  ·  compre o ${nomeV} primeiro`, gx, 262);
+      LST.forEach((S, i) => {
+        const x = gx + i * 98, y = 268;
+        card(kind + ':' + S.id, x, y, S.nome, S.preco, !S.preco || loja.tem.includes(S.id), temV && sel === S.id, (x, y) => {
+          if (veh === 'skate') { ctx.translate(x, y - 4); ctx.rotate(-.12); drawBoard3D(.3, -Math.PI * .78 + Math.sin(t * 1.5) * .12, .18, S); }
+          else { scootPrev = S.id; ctx.translate(x - 6, y + 30); drawScooter(.4, [SC.cx, SC.bot - 31, 0], null, 0, 0); scootPrev = null; }
+        }, !temV);
+      });
+    }
     else if (shopTab === 'rastros') grid(TRAILS, 'tr', loja.rastro, (it, x, y) => drawTrailIcon(it.id, x, y));
     // avisos da categoria
     ctx.font = `13px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = 'rgba(234,245,233,.65)';
-    const note = shopTab === 'shapes' ? 'A estampa aparece no skate (compre o SKATE em LOCOMOÇÃO).'
-      : (shopTab === 'acessorios' || shopTab === 'locomocao') && loja.loc === 'skate' ? 'No skate o acessório fica guardado (ainda não aparece andando de skate).'
-      : shopTab === 'rastros' ? 'O rastro aparece atrás do mascote durante a corrida.' : '';
+    const note = shopTab === 'rastros' ? 'O rastro aparece atrás do mascote durante a corrida.' : '';
     if (note) ctx.fillText(note, gx, 360);
     if (shopMsg && t - shopMsg.t0 < 1.6) {
       ctx.globalAlpha = Math.min(1, (1.6 - (t - shopMsg.t0)) * 2);
@@ -3676,18 +4249,23 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.globalAlpha = 1;
     }
   }
-  let shopTab = 'personagem';
-  const SHOP_LISTS = { skin: [SKINS, 'cor'], acc: [ACCS, 'acc'], loc: [LOCS, 'loc'], shape: [SHAPES, 'shape'], tr: [TRAILS, 'rastro'] };
+  let shopTab = 'personagem', shopVeh = 'skate';                              // shopVeh = veículo cujas cores aparecem embaixo
+  const SHOP_LISTS = { skin: [SKINS, 'cor'], acc: [ACCS, 'acc'], loc: [LOCS, 'loc'], shape: [SHAPES, 'shape', 'skate'], pat: [PATINETES, 'patinete', 'patinete'], tr: [TRAILS, 'rastro'] };
   function shopTap(kind, id) {
-    if (kind === 'tab') { shopTab = id; return; }
+    if (kind === 'tab') { shopTab = id; if (id === 'locomocao' && loja.loc !== 'pe') shopVeh = loja.loc; return; }
     const L = SHOP_LISTS[kind]; if (!L) return;
     const it = L[0].find(x => x.id === id); if (!it) return;
+    if (kind === 'loc' && id !== 'pe') shopVeh = id;                         // mostra as cores deste veículo
+    if (L[2] && !loja.tem.includes(L[2])) {                                  // cor de veículo que ainda não tem: não deixa comprar
+      shopMsg = { txt: `Compre o ${L[2] === 'skate' ? 'SKATE' : 'PATINETE'} primeiro!`, cor: '#ff8a7a', t0: t }; beep(180, .18, 'square', .04, .7); return;
+    }
     if (it.preco && !loja.tem.includes(id)) {
       if (loja.carteira < it.preco) { shopMsg = { txt: `Faltam ${it.preco - loja.carteira} tampinhas`, cor: '#ff8a7a', t0: t }; beep(180, .18, 'square', .04, .7); return; }
-      loja.carteira -= it.preco; loja.tem.push(id); shopMsg = { txt: `${it.nome} comprado!`, cor: '#9bcb45', t0: t };
+      loja.carteira -= it.preco; loja.tem.push(id); stats.compras++; salvarStats(); checarMedalhas(); shopMsg = { txt: `${it.nome} comprado!`, cor: '#9bcb45', t0: t };
       sfx.buy();
     }
     loja[L[1]] = id;
+    if (L[2]) loja.loc = L[2];                                               // escolheu a cor do skate/patinete: já anda com ele
     salvarLoja();
     if (kind === 'acc' || kind === 'loc') { warmAcc(); if (!tintJobs.running) warmTintsStart(); }
   }
@@ -3695,7 +4273,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   function drawTrailIcon(id, x, y, big) {
     if (!id) { if (!big) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 16, 0, TAU); ctx.moveTo(x - 11, y + 11); ctx.lineTo(x + 11, y - 11); ctx.stroke(); } return; }
     const ph = t * 2;
-    if (id === 'tr_bolhas') [[-20, 6, 7], [-4, -8, 5], [12, 4, 8], [24, -12, 4], [-14, -16, 3.5]].forEach(([dx, dy, r], i) => {
+    if (id === 'tr_bolhas' && ok(FX.bolha)) [[-18, 6, 8], [-2, -8, 6], [14, 4, 9], [24, -12, 5]].forEach(([dx, dy, r], i) => fx('bolha', x + dx, y + dy - ((ph * 8 + i * 7) % 10), r * 2.3));
+    else if (id === 'tr_notas' && ok(FX.nota1)) [['nota1', -14, 4], ['nota2', 8, -8], ['nota1', 22, 8]].forEach(([n, dx, dy], i) => fx(n, x + dx, y + dy + Math.sin(ph * 2 + i) * 3, 24, Math.sin(ph * 2 + i) * .2));
+    else if (id === 'tr_estrelas' && ok(FX.estrela)) [['estrela', -16, 4, 18], ['brilho', 2, -10, 16], ['estrela', 18, 6, 14], ['brilho', 8, 14, 10]].forEach(([n, dx, dy, sz], i) => fx(n, x + dx, y + dy, sz + Math.sin(ph * 3 + i) * 2, n === 'estrela' ? ph + i : 0));
+    else if (id === 'tr_fogo' && ok(FX.chama)) [[-16, 6, 24], [0, -2, 32], [16, 6, 22]].forEach(([dx, dy, sz], i) => fx('chama', x + dx, y + dy, sz + Math.sin(ph * 4 + i) * 3, Math.sin(ph * 5 + i) * .1));
+    else if (id === 'tr_bolhas') [[-20, 6, 7], [-4, -8, 5], [12, 4, 8], [24, -12, 4], [-14, -16, 3.5]].forEach(([dx, dy, r], i) => {
       const yy = y + dy - ((ph * 8 + i * 7) % 10); ctx.strokeStyle = 'rgba(230,250,255,.95)'; ctx.lineWidth = 1.5; ctx.fillStyle = 'rgba(160,220,255,.25)';
       ctx.beginPath(); ctx.arc(x + dx, yy, r, 0, TAU); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + dx - r * .35, yy - r * .35, r * .25, 0, TAU); ctx.fill(); });
     else if (id === 'tr_notas') [['♪', -14, 4, '#ffd23a'], ['♫', 8, -8, '#7fd0ff'], ['♪', 22, 8, '#ff6a5f']].forEach(([c, dx, dy, col], i) => {
@@ -3829,6 +4411,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     else if (b.id === 'send') rankSubmit();
     else if (b.id === 'rkall' || b.id === 'rkweek') { rankTab = b.id === 'rkall' ? 'top' : 'semana'; rankLoad(); }
     else if (b.id === 'back') state = 'ready';
+    else if (b.id === 'goals') state = 'goals';
+    else if (b.id === 'cont') continuar();
+    else if (b.id === 'share') compartilhar();
     else if (b.id.includes(':')) { const [kind, id] = b.id.split(':'); shopTap(kind, id); }
     else if (b.id === 'resume') togglePause();
     else if (b.id === 'play' || b.id === 'again') start();
@@ -3867,6 +4452,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
 
     drawHud();
     menu();
+    drawToasts();
   }
 
   // mede a fluidez enquanto corre: média acima de ~22 ms por quadro baixa a resolução um degrau
@@ -3882,8 +4468,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     requestAnimationFrame(frame);
     if (last) watchPerf(now - last);
     const root = document.documentElement;
-    root.classList.toggle('in-menu', state === 'ready' || state === 'over' || state === 'paused' || state === 'shop' || state === 'rank');
-    root.classList.toggle('no-pause', state === 'ready' || state === 'over' || state === 'shop' || state === 'rank');
+    root.classList.toggle('in-menu', state === 'ready' || state === 'over' || state === 'paused' || state === 'shop' || state === 'rank' || state === 'goals');
+    root.classList.toggle('no-pause', state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals');
     const pIcon = state === 'paused' ? '▶' : '❚❚';
     if (pauseBtn.textContent !== pIcon) pauseBtn.textContent = pIcon;
     nightBudget = 1;
@@ -3894,11 +4480,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_SHEET), ...Object.values(ACC_SLIDE), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, BMX_IMG, BMX_RODA]
+  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)]
     .forEach(im => (im.decode ? im.decode() : Promise.resolve()).then(() => warmCtx.drawImage(im, 0, 0, 1, 1)).catch(() => {}));
   // prepara as versões coloridas do mascote aos poucos, uma por vez, para a primeira garrafa não travar o jogo
   const tintJobs = [];
-  const warmAcc = () => { const sh = loja.loc === 'skate' ? SKATE_IMG : loja.loc === 'patinete' ? SCOOT_IMG : loja.loc === 'bmx' ? BMX_IMG : loja.acc && ACC_SHEET[loja.acc]; if (sh) Object.keys(POWER_TINT).forEach(k => tintJobs.unshift([sh, k])); };
+  const warmAcc = () => { const sh = loja.loc === 'skate' ? SKATE_IMG : loja.loc === 'patinete' ? SCOOT_IMG : loja.loc === 'bmx' ? BMX_IMG : accImg('base'); if (sh) Object.keys(POWER_TINT).forEach(k => tintJobs.unshift([sh, k])); };
   if (skinKey()) [SPRITES, SLIDE_IMG, MORTAL_IMG, POSES_IMG].forEach(im => tintJobs.push([im, skinKey()]));   // cor comprada primeiro
   warmAcc();
   Object.keys(POWER_TINT).forEach(k => [SPRITES, SLIDE_IMG, MORTAL_IMG].forEach(im => tintJobs.push([im, k])));
