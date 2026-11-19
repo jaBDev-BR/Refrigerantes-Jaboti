@@ -1,0 +1,38 @@
+# Conferência automática do Jaboti Run a cada envio que mexe no jogo (arcade/):
+# bateria de prints (erros de JavaScript, botões dos menus encostando/saindo da tela, imagens sem uso) + medição de desempenho.
+# Se der problema, o envio fica com ✗ vermelho no GitHub e chega e-mail. Os prints ficam em "Artifacts" da execução.
+# Os scripts são cópias de ferramentas/ (projeto local), atualizadas por ferramentas/conferir-antes-de-publicar.sh.
+name: Conferência do jogo
+on:
+  push:
+    paths: ['arcade/**', '.github/conferencia/**', '.github/workflows/conferencia.yml']
+  workflow_dispatch:
+jobs:
+  conferir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Navegador de teste
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i playwright-core@1.55.0 >/dev/null
+          npx -y playwright@1.55.0 install --with-deps chromium-headless-shell
+      - name: Cópia do jogo com ganchos de teste
+        run: python3 .github/conferencia/gerar-harness.py arcade/index.html arcade/_perf.html
+      - name: Bateria de prints e botões
+        run: |
+          python3 -m http.server 8765 >/dev/null 2>&1 &
+          sleep 2
+          mkdir -p /tmp/prints
+          HS=$(ls -d ~/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell | head -1)
+          ARCADE_DIR=$PWD/arcade node .github/conferencia/bateria-prints.js /tmp/pw/node_modules/playwright-core "$HS" /tmp/prints
+      - name: Desempenho (só informa; o computador do GitHub é mais lento que um celular bom)
+        if: always()
+        run: |
+          HS=$(ls -d ~/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell | head -1)
+          node .github/conferencia/medir-desempenho.js /tmp/pw/node_modules/playwright-core "$HS" 40 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: prints-da-conferencia, path: /tmp/prints, retention-days: 14 }

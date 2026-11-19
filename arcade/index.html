@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#063d27">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icone-192.png">
 <title>Jaboti Run · JABDEV Arcade</title>
 <style>
 @font-face{font-family:'Lilita One';src:url(assets/fonts/lilita-one.woff2) format('woff2');font-display:swap}
@@ -135,6 +138,9 @@ html.app .pad.on{transform:scale(.9);background:rgba(255,255,255,.3);border-colo
 html.app #jump{right:max(26px,env(safe-area-inset-right));bottom:24px;width:96px;height:96px}
 html.app #duck{left:max(26px,env(safe-area-inset-left));bottom:24px;width:80px;height:80px}
 html.app #duck .ic{font-size:1.5rem}
+/* ajuste "botões trocados de lado" (canhoto): pular à esquerda, deslizar à direita */
+html.app.canhoto #jump{right:auto;left:max(26px,env(safe-area-inset-left))}
+html.app.canhoto #duck{left:auto;right:max(26px,env(safe-area-inset-right))}
 html.app .mini{top:8px;width:38px;height:38px;min-height:0;padding:0;border-radius:50%;font-size:.95rem;
   background:rgba(0,0,0,.18);border:1.5px solid rgba(255,255,255,.45);color:#fff}
 html.app #sound{left:calc(50% + 6px)}
@@ -219,6 +225,25 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
 </main>
 <script>
 (() => {
+  // versão das imagens (ferramentas/versao-assets.py grava aqui um resumo do conteúdo de assets/ antes de publicar):
+  // cada imagem pedida como assets/... vira assets/...?v=<versão>, então depois de publicar o navegador nunca mistura
+  // código novo com imagem antiga guardada (o GitHub Pages manda guardar por 10 min). No app as imagens vêm de dentro do APK.
+  const ASSET_V = '217c061cec';
+  if (ASSET_V !== 'dev' && /^https?:$/.test(location.protocol) && location.hostname !== 'appassets.androidplatform.net') {
+    const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get() { return d.get.call(this); },
+      set(v) { if (typeof v === 'string' && v.startsWith('assets/') && !v.includes('?')) v += '?v=' + ASSET_V; d.set.call(this, v); } });
+  }
+  // site instalável e jogável sem internet (sw.js + manifest.webmanifest): só no GitHub Pages
+  if ('serviceWorker' in navigator && /\.github\.io$/.test(location.hostname)) addEventListener('load', () => {
+    const primeira = !navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
+      if (!primeira) return;                                                   // 1ª visita: guarda já as imagens que a página baixou antes do sw existir
+      const v = ASSET_V !== 'dev' ? '?v=' + ASSET_V : '', urls = new Set(['./?app', './']);
+      PRELOAD.forEach(im => im && im.src && urls.add(im.src)); TARDE.forEach(([, src]) => urls.add(src + v));
+      caches.open('jaboti-run').then(c => Promise.all([...urls].map(u => c.match(u).then(h => h || fetch(u).then(r => r.ok && c.put(u, r)))))).catch(() => {});
+    }).catch(() => {});
+  });
   // ================================================================
   //  CONFIGURAÇÃO
   // ================================================================
@@ -232,7 +257,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const START_SPEED = 400, MAX_SPEED = 1000, ACCEL = 5.5;   // 2026-11-18: jogadores acharam rápido demais (antes 440 / 1080 / 9)
 
   const canvas = document.getElementById('game');
-  let ctx = canvas.getContext('2d');                                      // let: o escudo mede o mascote desenhando-o num canvas pequeno (shieldFit)
+  const ctx = canvas.getContext('2d');
   // resolução de desenho: no app começa em até 1,5× e baixa sozinha se o celular não der conta
   const APP = document.documentElement.classList.contains('app');
   // RANKING ONLINE (Supabase): preencha com a "Project URL" e a chave pública "anon" do projeto
@@ -323,6 +348,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   renderSoundBtn();
   // ---------------- motor de áudio (tudo sintetizado, sem arquivos) ----------------
   // master → compressor → saída; a música e os efeitos têm volumes próprios
+  // AJUSTES (2026-11-19, tela ⚙ AJUSTES): vibração, modo fácil, volume da música e dos efeitos, botões trocados de lado (canhoto)
+  const aj = { vib: true, facil: false, musica: 1, efeitos: 1, canhoto: false };
+  try { Object.assign(aj, JSON.parse(localStorage.getItem('jabotiRunAjustes') || '{}')); if (localStorage.getItem('jabotiRunVibrar') === '0') aj.vib = false; } catch (e) {}
+  const salvarAj = () => { try { localStorage.setItem('jabotiRunAjustes', JSON.stringify(aj)); } catch (e) {} };
+  const FACIL = () => aj.facil ? { start: .85, max: .8, acc: .7, gap: 1.25 } : { start: 1, max: 1, acc: 1, gap: 1 };
+  document.documentElement.classList.toggle('canhoto', aj.canhoto);
   let master = null, musicBus = null, musicFilter = null, sfxBus = null, noiseBuf = null;
   function ensureAudio() {
     if (audio) return audio;
@@ -331,8 +362,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const comp = audio.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(audio.destination);
       master = audio.createGain(); master.gain.value = muted ? 0 : .9; master.connect(comp);
       musicFilter = audio.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 18000; musicFilter.connect(master);
-      musicBus = audio.createGain(); musicBus.gain.value = .5; musicBus.connect(musicFilter);
-      sfxBus = audio.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+      musicBus = audio.createGain(); musicBus.gain.value = .5 * aj.musica; musicBus.connect(musicFilter);
+      sfxBus = audio.createGain(); sfxBus.gain.value = aj.efeitos; sfxBus.connect(master);
       noiseBuf = audio.createBuffer(1, audio.sampleRate * .5, audio.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
     } catch (e) { audio = null; }
@@ -499,7 +530,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const want = muted ? null : musicTarget();
     if (want !== mus.song) {
       mus.song = want; mus.step = 0; mus.loops = 0; mus.next = audio.currentTime + .06;
-      if (want) { musicBus.gain.cancelScheduledValues(audio.currentTime); musicBus.gain.setValueAtTime(0, audio.currentTime); musicBus.gain.linearRampToValueAtTime(.5, audio.currentTime + .4); }
+      if (want) { musicBus.gain.cancelScheduledValues(audio.currentTime); musicBus.gain.setValueAtTime(0, audio.currentTime); musicBus.gain.linearRampToValueAtTime(.5 * aj.musica, audio.currentTime + .4); }
     }
     // pausa: música abafada; câmera lenta: abafada e mais devagar
     const lento = state === 'running' && skills && skills.lento > 0;
@@ -571,10 +602,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     player = { y: 0, vy: 0, ground: true, jumps: 0, coyote: 0, buffer: 0, spin: -1, land: 0, stretch: 0, dx: 0, drop: 0, deadT: 0, landedDead: false, rotDead: 0, slide: false, blink: 2, grind: null };
     pose = { ...IDLE_POSE };
     obstacles = []; coins = []; particles = []; texts = [];
-    speed = START_SPEED; dist = 0; score = 0; bonus = 0; caps = 0; gap = 800; runTime = 0; rankSent = null; boardFly = null;
+    speed = START_SPEED * FACIL().start; dist = 0; score = 0; bonus = 0; caps = 0; gap = 800; runTime = 0; rankSent = null; boardFly = null;
     flash = 0; shake = 0; hitstop = 0; newBest = false; runPhase = 0; stepIndex = 0; celebrate = 0;
     combo = { n: 0, pts: 0, ground: 0, t0: -9, names: [] }; comboMsg = null; trailHist = [];
-    skills = {}; items = []; skillTimer = 3.5; lataTimer = 22 + Math.random() * 10; invuln = 0; pts = 0; vel = START_SPEED;
+    skills = {}; items = []; skillTimer = 3.5; lataTimer = 22 + Math.random() * 10; invuln = 0; pts = 0; vel = speed;
     continued = false; capsBanked = 0; lastM = 0; vehM = 0;
   }
   // profundidade: d = 0 bem longe (pequeno, lento, transparente) até 1 perto (grande, rápido)
@@ -630,6 +661,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (DUCK_KEYS.includes(e.key)) duckHeld = true;
     if (e.key === 'p' || e.key === 'P') togglePause();
     if (e.key === 'Escape' && (state === 'shop' || state === 'rank' || state === 'goals')) state = 'ready';
+    else if (e.key === 'Escape' && state === 'ajustes') state = ajVolta;
     if (e.key === 'm' || e.key === 'M') toggleSound();
   });
   document.addEventListener('keyup', e => {
@@ -748,7 +780,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       }
       return w;
     }
-    if (score > 100 && r < .14 && !bmxOn()) {
+    if (score > 100 && r < .14) {
       if (biomeWeights().fabrica > .5) {
         // dentro da fábrica: braço robótico segurando engradados (só passa deslizando por baixo)
         obstacles.push({ kind: 'hang', x: x0, w: HANG_W, bottom: GROUND - 100, rows: 2, sway: Math.random() * TAU });
@@ -865,18 +897,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     superman: { turns: 0, screw: 0, dur: .56, label: 'SUPERMAN!', color: '#7fd0ff', sc: 2 },
     tailwhip: { turns: 0, screw: 0, dur: .5, label: 'TAILWHIP!', color: '#ffd84a', sc: 3, whip: 1 },
     nohander: { turns: 0, screw: 0, dur: .5, label: 'NO HANDER!', color: '#9bcb45', sc: 4 },
-    tailwhip2: { turns: 0, screw: 0, dur: .66, label: 'TAILWHIP DUPLO!', color: '#ff6a5f', sc: 3, whip: 2 },
-    // de BMX (pose em bx; flip = voltas para trás da bicicleta inteira)
-    bxsuper:  { turns: 0, screw: 0, dur: .58, label: 'SUPERMAN!', color: '#7fd0ff', bx: 3 },
-    bxnohand: { turns: 0, screw: 0, dur: .52, label: 'NO HANDER!', color: '#9bcb45', bx: 4 },
-    bxwhip:   { turns: 0, screw: 0, dur: .55, label: 'TAILWHIP!', color: '#f08a1c', bx: 5, whip: 1 },
-    backflip: { turns: 0, screw: 0, dur: .62, label: 'BACKFLIP!', color: '#ffd84a', bx: 2, flip: 1 },
-    backflip2: { turns: 0, screw: 0, dur: .8, label: 'BACKFLIP DUPLO!', color: '#ff6a5f', bx: 2, flip: 2 }
+    tailwhip2: { turns: 0, screw: 0, dur: .66, label: 'TAILWHIP DUPLO!', color: '#ff6a5f', sc: 3, whip: 2 }
   };
   let lastTrick = '';
   function pickTrick() {
-    if (player.jumps >= 3) return bmxOn() ? 'backflip2' : scooterOn() ? 'tailwhip2' : skateOn() ? 'duplosk' : 'duplo';
-    const opts = (bmxOn() ? ['bxsuper', 'bxnohand', 'bxwhip', 'backflip'] : scooterOn() ? ['superman', 'tailwhip', 'nohander'] : skateOn() ? ['kickflip', 'grab', 'treflip'] : ['mortal', 'reverso', 'parafuso']).filter(k => k !== lastTrick);
+    if (player.jumps >= 3) return scooterOn() ? 'tailwhip2' : skateOn() ? 'duplosk' : 'duplo';
+    const opts = (scooterOn() ? ['superman', 'tailwhip', 'nohander'] : skateOn() ? ['kickflip', 'grab', 'treflip'] : ['mortal', 'reverso', 'parafuso']).filter(k => k !== lastTrick);
     return (lastTrick = pick(opts));
   }
   // poses das manobras (Gemini): 0 entrando, 1 e 2 encolhido como bola, 3 abrindo, 4 parafuso de braços cruzados;
@@ -930,16 +956,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { label: 'SMITH!', f: 0, dy: 14, tilt: .2, color: '#f08a1c' },
     { label: 'ICEPICK!', f: 4, dy: 14, tilt: -.12, color: '#9bcb45' }
   ];
-  // de BMX os pinos (pegs) dos eixos raspam no corrimão
-  const GRINDS_BX = [
-    { label: 'DOUBLE PEG!', f: 0, dy: 23, color: '#ffd84a' },              // dy = altura dos pinos (raio da roda × BMX_S)
-    { label: 'FEEBLE!', f: 1, dy: 23, tilt: -.14, color: '#7fd0ff' },
-    { label: 'ICEPICK!', f: 1, dy: 23, tilt: -.3, color: '#9bcb45' }
-  ];
   let lastGrind = null;
   const GRIND_TRUCK = 88;                                                    // distância do truck ao meio do skate (px do atlas)
   // x na tela do ponto que raspa no corrimão (truck da frente, de trás ou o meio)
-  const grindX = () => { const g = player.grind && player.grind.g; return PX + (g && g.tilt ? Math.sign(g.tilt) * (bmxOn() ? 70 : scooterOn() ? 62 : GRIND_TRUCK) * SP.scale * Math.cos(player.grind.slope) : 0); };
+  const grindX = () => { const g = player.grind && player.grind.g; return PX + (g && g.tilt ? Math.sign(g.tilt) * (scooterOn() ? 62 : GRIND_TRUCK) * SP.scale * Math.cos(player.grind.slope) : 0); };
   // obstáculos de skate onde dá para andar em cima: rampa (curva que sobe) e escadaria (degraus + patamar)
   function surfaceAt(o, x) {
     const u = x - o.x;
@@ -969,7 +989,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     return -1;
   }
   function startGrind(o) {
-    const g = pick((bmxOn() ? GRINDS_BX : scooterOn() ? GRINDS_SC : GRINDS).filter(x => x !== lastGrind)); lastGrind = g;
+    const g = pick((scooterOn() ? GRINDS_SC : GRINDS).filter(x => x !== lastGrind)); lastGrind = g;
     const slope = o.kind === 'stairs' ? Math.atan2(o.h, o.down) : 0;
     player.grind = { o, g, t: 0, slope }; player.ground = false; player.spin = -1; player.trail = []; player.vy = 0; player.y = railTop(o, PX) - g.dy; player.jumps = 0; player.land = .6;
     popText(PX + 70, GROUND - player.y - 130, g.label, g.color); sfx.grind(); sparkle(PX + 10, GROUND - player.y - g.dy, 12, '#ffe08a');
@@ -982,7 +1002,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function playerBox() {
     const sliding = player.slide && player.ground;
-    if (bmxOn()) return { x1: PX - 34, x2: PX + 56, y1: GROUND - player.y - (player.slide && player.ground ? 118 : 132), y2: GROUND - player.y - 3 };
     const h = sliding ? 86 : wheels() ? 114 : 104;
     return { x1: PX - 22, x2: PX + 24, y1: GROUND - player.y - h, y2: GROUND - player.y - 3 };
   }
@@ -1003,7 +1022,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     state = 'dying'; hitstop = .12; shake = 14;
     comboEnd(false); player.grind = null; player.slope = 0; player.stairDrop = 0; player.vy = 640; player.ground = false; player.deadT = 0; player.landedDead = false; player.spin = -1;
     sparkle(PX + 20, GROUND - player.y - 50, 14, '#ffffff'); sfx.hit(); skills = {};
-    if (wheels()) boardFly = { x: PX, y: GROUND - player.y - 8, vx: 260, vy: -520, r: 0, vr: 9, scooter: scooterOn(), bmx: bmxOn() };
+    if (wheels()) boardFly = { x: PX, y: GROUND - player.y - 8, vx: 260, vy: -520, r: 0, vr: 9, scooter: scooterOn() };
     loja.carteira += caps - capsBanked; capsBanked = caps; salvarLoja();     // tampinhas da partida vão para a carteira (sem contar 2× ao continuar)
     if (score > best) { best = score; newBest = true; try { localStorage.setItem('jabotiRunBest', String(best)); } catch (e) {} }
     vib(140);
@@ -1019,7 +1038,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     { const icones = state === 'running' && POWER_ORDER.some(k => skills[k] > 0);   // com poder ativo: espaço para os ícones em cima da cabeça
       const top = GROUND - player.y - 140, iconTop = GROUND - player.y - 150 - 20 - 28;   // topo da barrinha de tempo   // topo do mascote / da fileira de ícones
       const want = state === 'running' || state === 'dying' ? (icones ? clamp(56 - iconTop, 0, 300) : clamp(16 - top, 0, 90)) : 0;   // barrinhas abaixo do contador de tampinhas (y 56)
-      camY += (want - camY) * (1 - Math.exp(-realDt * (icones && want > camY ? 16 : 7))); }   // com ícones a câmera desce mais rápido (não deixa a fileira bater no painel)
+      camY += (want - camY) * (1 - Math.exp(-realDt * (icones && want > camY ? 9 : 5))); }   // mais suave (o cenário inteiro sobe e desce junto)   // com ícones a câmera desce mais rápido (não deixa a fileira bater no painel)
     if (state === 'running' && skills.lento > 0) dt *= .55;   // câmera lenta da Uva
     if (state === 'running') { dt *= tutUpdate(realDt); acompanhar(); }   // tutorial: câmera lenta até o jogador fazer o movimento
     t += dt;
@@ -1049,7 +1068,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         skills[k] -= realDt;
         if (skills[k] <= 0) { delete skills[k]; if (k === 'turbo') invuln = Math.max(invuln, .9); }
       }
-      speed = Math.min(MAX_SPEED, speed + ACCEL * dt);
+      speed = Math.min(MAX_SPEED * FACIL().max, speed + ACCEL * FACIL().acc * dt);
       vel = lerp(vel, speed + (skills.turbo > 0 ? 460 : 0), 1 - Math.exp(-dt * 5));
       dist += vel * dt;
       pts += vel * dt * .025 * mult(); runTime += realDt;
@@ -1149,7 +1168,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       items.forEach(it => { it.x -= vel * dt; it.ph += dt * 3; });
       items = items.filter(it => it.x > -40);
       gap -= vel * dt;
-      if (gap <= 0) { const w = spawn(); gap = w + speed * (.7 + Math.random() * .75) + 190; }
+      if (gap <= 0) { const w = spawn(); gap = (w + speed * (.7 + Math.random() * .75) + 190) * FACIL().gap; }
       // garrafas de poder aparecem nos espaços livres entre obstáculos
       skillTimer -= dt;
       if (skillTimer <= 0 && gap > 280 && !tutAtivo()) { spawnSkill(); skillTimer = 6 + Math.random() * 5; }
@@ -1405,7 +1424,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   //  JOGAR DE NOVO TODO DIA (2026-11-19): missões diárias, medalhas, tutorial, continuar, vibração e compartilhar
   // ================================================================
   // vibração: no app pela ponte Java (JabotiApp.vibrar), no navegador pela Vibration API
-  const vib = ms => { try { if (window.JabotiApp && JabotiApp.vibrar) JabotiApp.vibrar(ms); else if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} };
+  // vibração pode ser desligada (menu principal e pausa); fica salvo no aparelho
+  const vib = ms => { if (!aj.vib) return; try { if (window.JabotiApp && JabotiApp.vibrar) JabotiApp.vibrar(ms); else if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} };
   // avisos no alto da tela (missão cumprida, medalha) — um por vez
   const toasts = [];
   function toast(title, sub, color = '#ffd23a') { toasts.push({ title, sub, color, t0: null }); }
@@ -1413,13 +1433,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const q = toasts[0]; if (!q) return;
     if (q.t0 === null) q.t0 = performance.now() / 1000;
     const a = performance.now() / 1000 - q.t0; if (a > 3) { toasts.shift(); return; }
-    const fim = state === 'over' || state === 'dying', w = fim ? 340 : 430, x = fim ? W - w - 14 : W / 2 - w / 2;   // na tela de fim vai para o canto direito (livre)
-    const k = a < .3 ? easeOut(a / .3) : a > 2.6 ? 1 - (a - 2.6) / .4 : 1, y = (fim ? 70 : 54) - (1 - k) * 70;
+    // sempre no canto direito (no meio cobria o COMBO na corrida e os títulos da loja/missões)
+    const fim = state === 'over' || state === 'dying', w = 320, x = W - w - 14;   // na tela de fim vai para o canto direito (livre)
+    const k = a < .3 ? easeOut(a / .3) : a > 2.6 ? 1 - (a - 2.6) / .4 : 1, y = (fim ? 70 : 62) - (1 - k) * 70;
     ctx.save(); ctx.globalAlpha = clamp(k, 0, 1);
     ctx.fillStyle = 'rgba(8,24,16,.88)'; rr(x, y, w, 58, 29); ctx.fill(); ctx.strokeStyle = q.color; ctx.lineWidth = 3; ctx.stroke();
     ctx.font = `30px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏅', x + 34, y + 30);
-    ctx.textAlign = 'left'; ctx.font = `19px ${UI}`; ctx.fillStyle = q.color; ctx.fillText(q.title, x + 62, y + 20);
-    ctx.font = `15px ${UI}`; ctx.fillStyle = '#eaf5e9'; ctx.fillText(q.sub, x + 62, y + 41);
+    ctx.textAlign = 'left'; ctx.font = `17px ${UI}`; ctx.fillStyle = q.color; ctx.fillText(q.title, x + 62, y + 20, w - 74);
+    ctx.font = `13px ${UI}`; ctx.fillStyle = '#eaf5e9'; ctx.fillText(q.sub, x + 62, y + 41, w - 74);
     ctx.restore();
   }
   // ---- estatísticas e medalhas (permanentes) ----
@@ -1481,6 +1502,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const salvarMissoes = () => { try { localStorage.setItem('jabotiRunMissoes', JSON.stringify(missoes)); } catch (e) {} };
   const missaoTxt = m => MISSOES.find(x => x.id === m.id).txt(m.alvo);
   function missao(id, v) {
+    if (id !== 'metros') semanal(id, v);                                      // metros da semana somam em acompanhar()
     if (!missoes || missoes.dia !== hoje()) carregarMissoes();
     missoes.lista.forEach(m => {
       if (m.id !== id || m.feito) return;
@@ -1493,11 +1515,56 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     });
   }
   carregarMissoes();
+  // ---- dias seguidos (2026-11-19): abrir o jogo em dias seguidos dá tampinhas crescentes (7º dia = prêmio grande; depois recomeça a escala) ----
+  const SEQ_PREMIOS = [20, 30, 40, 50, 60, 80, 150];
+  let seq = { ultimo: '', dias: 0 };
+  try { seq = Object.assign(seq, JSON.parse(localStorage.getItem('jabotiRunSequencia') || '{}')); } catch (e) {}
+  const diaStr = d => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+  function checarSequencia() {
+    const h = hoje(); if (seq.ultimo === h) return;
+    const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+    seq.dias = seq.ultimo === diaStr(ontem) ? seq.dias + 1 : 1; seq.ultimo = h;
+    const premio = SEQ_PREMIOS[(seq.dias - 1) % 7];
+    loja.carteira += premio; salvarLoja();
+    try { localStorage.setItem('jabotiRunSequencia', JSON.stringify(seq)); } catch (e) {}
+    toast(seq.dias > 1 ? `🔥 ${seq.dias} DIAS SEGUIDOS!` : 'BEM-VINDO DE VOLTA!', `Prêmio do dia: +${premio} tampinhas · volte amanhã`, '#ff9f1a');
+  }
+  checarSequencia();
+  // ---- desafio da semana: um objetivo maior, somado durante a semana (segunda a domingo) ----
+  const DESAFIOS = [
+    { id: 'metros', txt: n => `Corra ${n} m nesta semana`, alvo: 8000, premio: 300 },
+    { id: 'manobras', txt: n => `Faça ${n} manobras nesta semana`, alvo: 60, premio: 300 },
+    { id: 'caps', txt: n => `Pegue ${n} tampinhas nesta semana`, alvo: 600, premio: 300 },
+    { id: 'garrafas', txt: n => `Beba ${n} garrafas de poder nesta semana`, alvo: 40, premio: 250 },
+    { id: 'partidas', txt: n => `Jogue ${n} partidas nesta semana`, alvo: 25, premio: 250 }
+  ];
+  const semanaStr = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return 'S' + diaStr(d); };   // segunda-feira da semana
+  let desafio = null;
+  function carregarDesafio() {
+    try { desafio = JSON.parse(localStorage.getItem('jabotiRunDesafio') || 'null'); } catch (e) { desafio = null; }
+    const sem = semanaStr(); if (desafio && desafio.semana === sem && DESAFIOS.some(d => d.id === desafio.id)) return;
+    const seed = [...sem].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 11);
+    desafio = { semana: sem, id: DESAFIOS[seed % DESAFIOS.length].id, prog: 0, feito: false }; salvarDesafio();
+  }
+  const salvarDesafio = () => { try { localStorage.setItem('jabotiRunDesafio', JSON.stringify(desafio)); } catch (e) {} };
+  const desafioDef = () => DESAFIOS.find(d => d.id === desafio.id);
+  function semanal(id, v) {
+    if (!desafio || desafio.semana !== semanaStr()) carregarDesafio();
+    if (desafio.id !== id || desafio.feito || !(v > 0)) return;
+    const D = desafioDef(); desafio.prog += v;
+    if (desafio.prog >= D.alvo) {
+      desafio.prog = D.alvo; desafio.feito = true; loja.carteira += D.premio; salvarLoja();
+      toast('DESAFIO DA SEMANA!', `${D.txt(D.alvo)}  ·  +${D.premio} tampinhas`, '#ff9f1a'); sfx.milestone(); vib(60);
+    }
+    salvarDesafio();
+  }
+  carregarDesafio();
   // acompanhamento durante a corrida (metros, pontos, veículo, fábrica) — chamado no update
   function acompanhar() {
     const m = Math.floor(dist / 50);
     if (m !== lastM) {
       if (wheels()) { vehM += m - lastM; if (vehM >= 10) { missao('veiculo', vehM); vehM = 0; } }
+      if (m > lastM && m - lastM < 50) semanal('metros', m - lastM);
       lastM = m; if (m % 10 === 0) { missao('metros', m); missao('pontos', Math.floor(score)); }
     }
     if (!stats.fabrica && biomeWeights().fabrica > .5) { stats.fabrica = true; checarMedalhas(); }
@@ -1516,7 +1583,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const o = obstacles.find(o => o.tut === tut.step + 1);
     if (tut.step === 2) { tut.t2 += dt; if (tut.feito || tut.t2 > 6) tutFim(); return 1; }
     if (!o) return 1;
-    if (o.x + o.w < PX - 40) { tut.step++; tut.feito = false; tut.t2 = 0; if (tut.step === 1 && bmxOn()) tut.step = 2; return 1; }
+    if (o.x + o.w < PX - 40) { tut.step++; tut.feito = false; tut.t2 = 0; return 1; }
     const perto = o.x - PX < 420 && o.x - PX > 20;
     const fez = tut.step === 0 ? !player.ground : player.slide;
     if (fez) tut.feito = true;
@@ -1559,7 +1626,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     loja.carteira -= CONT_PRECO; salvarLoja(); continued = true;
     Object.assign(player, { y: 0, vy: 0, ground: true, jumps: 0, coyote: 0, buffer: 0, spin: -1, land: 0, dx: 0, deadT: 0, landedDead: false, rotDead: 0, slide: false, grind: null, slope: 0, stairDrop: 0, trick: null });
     obstacles = obstacles.filter(o => o.x > PX + 520); boardFly = null; gap = Math.max(gap, 520);
-    speed = Math.max(START_SPEED, speed * .85); vel = speed; invuln = 2.5; state = 'running'; last = performance.now();
+    speed = Math.max(START_SPEED * FACIL().start, speed * .85); vel = speed; invuln = 2.5; state = 'running'; last = performance.now();
     sfx.power(); ring(PX, GROUND - 55, '#ffd23a'); sparkle(PX, GROUND - 55, 24, '#ffd23a'); flash = .4;
   }
   // ---- compartilhar recorde: imagem 1080×1080 com o mascote do troféu e a pontuação ----
@@ -1596,6 +1663,39 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const autoPausa = () => { if (state === 'running') togglePause(); };
   document.addEventListener('visibilitychange', () => { if (document.hidden) autoPausa(); });
   window.__appPausa = autoPausa;                      // chamado pelo app Android no onPause
+  // ---- tela AJUSTES (estado 'ajustes'; volta para onde veio: menu principal ou pausa) ----
+  let ajVolta = 'ready';
+  const AJ_ITENS = [
+    ['vib', '📳  Vibração', () => aj.vib ? 'LIGADA' : 'DESLIGADA'],
+    ['facil', '🐢  Modo fácil (mais devagar)', () => aj.facil ? 'LIGADO' : 'DESLIGADO'],
+    ['musica', '🎵  Volume da música', () => Math.round(aj.musica * 100) + '%'],
+    ['efeitos', '🔔  Volume dos efeitos', () => Math.round(aj.efeitos * 100) + '%'],
+    ['canhoto', '🔁  Botões trocados de lado', () => aj.canhoto ? 'PULAR À ESQUERDA' : 'PULAR À DIREITA']
+  ];
+  function ajusteTap(id) {
+    const passo = v => v <= 0 ? 1 : Math.round((v - .25) * 100) / 100;      // 100 → 75 → 50 → 25 → 0 → 100%
+    if (id === 'vib') { aj.vib = !aj.vib; if (aj.vib) vib(40); }
+    else if (id === 'facil') { if (state === 'ajustes' && ajVolta === 'paused') { toast('MODO FÁCIL', 'Vale a partir da próxima partida', '#7fd0ff'); } aj.facil = !aj.facil; }
+    else if (id === 'musica') { aj.musica = passo(aj.musica); if (musicBus) musicBus.gain.value = .5 * aj.musica; }
+    else if (id === 'efeitos') { aj.efeitos = passo(aj.efeitos); if (sfxBus) sfxBus.gain.value = aj.efeitos; sfx.coin && sfx.coin(); }
+    else if (id === 'canhoto') { aj.canhoto = !aj.canhoto; document.documentElement.classList.toggle('canhoto', aj.canhoto); }
+    salvarAj();
+  }
+  function drawAjustes(mt) {
+    ctx.fillStyle = 'rgba(2,10,7,.86)'; ctx.fillRect(0, -menuOY, W, H);
+    text3d('AJUSTES', W / 2, 52, 40, '#ffffff', '#ffe066', '#063d27', 5);
+    gameButton('ajback', 96, 40, 150, 42, '◀  VOLTAR', 'ghost');
+    const L = W / 2 - 300;
+    AJ_ITENS.forEach(([id, nome, val], i) => {
+      const y = 92 + i * 50;
+      ctx.fillStyle = 'rgba(255,255,255,.07)'; rr(L, y, 600, 42, 21); ctx.fill();
+      ctx.font = `18px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff'; ctx.fillText(nome, L + 22, y + 22);
+      const v = val(), on = !/DESLIG|^0%/.test(v);
+      gameButton('aj:' + id, L + 600 - 112, y + 21, 200, 34, v, on ? 'yellow' : 'ghost');
+    });
+    ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(234,245,233,.6)';
+    ctx.fillText('Modo fácil: começa mais devagar, acelera menos e os obstáculos vêm mais espaçados.', W / 2, 352);
+  }
   // ---- tela MISSÕES E MEDALHAS (estado 'goals') ----
   function drawGoals(mt) {
     if (!missoes || missoes.dia !== hoje()) carregarMissoes();
@@ -1606,20 +1706,26 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     // missões do dia
     const L = 50, LW = 520;
     ctx.font = `20px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#9bcb45'; ctx.fillText('🎯 MISSÕES DO DIA', L, 100);
-    missoes.lista.forEach((m, i) => {
-      const y = 112 + i * 64;
-      ctx.fillStyle = m.feito ? 'rgba(155,203,69,.18)' : 'rgba(255,255,255,.07)'; rr(L, y, LW, 54, 14); ctx.fill();
-      ctx.strokeStyle = m.feito ? '#9bcb45' : 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = `24px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(m.feito ? '✅' : '🎯', L + 28, y + 27);
-      ctx.textAlign = 'left'; ctx.font = `17px ${UI}`; ctx.fillStyle = '#ffffff'; ctx.fillText(missaoTxt(m), L + 54, y + 19);
-      ctx.fillStyle = 'rgba(255,255,255,.18)'; rr(L + 54, y + 33, 300, 10, 5); ctx.fill();
-      ctx.fillStyle = m.feito ? '#9bcb45' : '#ffd23a'; rr(L + 54, y + 33, 300 * clamp(m.prog / m.alvo, 0, 1), 10, 5); ctx.fill();
-      ctx.font = `13px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.8)'; ctx.fillText(`${Math.floor(m.prog)} / ${m.alvo}`, L + 362, y + 39);
-      ctx.textAlign = 'right'; ctx.font = `18px ${UI}`; ctx.fillStyle = m.feito ? '#9bcb45' : '#ffd23a'; ctx.fillText(m.feito ? 'GANHOU!' : `+${m.premio}`, L + LW - 16, y + 28);
-    });
+    if (seq.dias) { ctx.textAlign = 'right'; ctx.font = `16px ${UI}`; ctx.fillStyle = '#ff9f1a'; ctx.fillText(`🔥 ${seq.dias} ${seq.dias === 1 ? 'DIA' : 'DIAS SEGUIDOS'}`, L + LW, 100); ctx.textAlign = 'left'; }
+    // cartão (missão do dia ou desafio da semana)
+    const cartao = (y, txt, prog, alvo, premio, feito, cor, icone) => {
+      ctx.fillStyle = feito ? 'rgba(155,203,69,.18)' : 'rgba(255,255,255,.07)'; rr(L, y, LW, 46, 13); ctx.fill();
+      ctx.strokeStyle = feito ? '#9bcb45' : cor || 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = `21px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(feito ? '✅' : icone, L + 26, y + 23);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = `16px ${UI}`; ctx.fillStyle = '#ffffff'; ctx.fillText(txt, L + 50, y + 19, 380);
+      ctx.fillStyle = 'rgba(255,255,255,.18)'; rr(L + 50, y + 28, 300, 9, 4.5); ctx.fill();
+      ctx.fillStyle = feito ? '#9bcb45' : cor || '#ffd23a'; rr(L + 50, y + 28, 300 * clamp(prog / alvo, 0, 1), 9, 4.5); ctx.fill();
+      ctx.font = `12px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.8)'; ctx.fillText(`${Math.floor(prog)} / ${alvo}`, L + 358, y + 37);
+      ctx.textAlign = 'right'; ctx.font = `17px ${UI}`; ctx.fillStyle = feito ? '#9bcb45' : cor || '#ffd23a'; ctx.fillText(feito ? 'GANHOU!' : `+${premio}`, L + LW - 14, y + 29);
+      ctx.textAlign = 'left';
+    };
+    missoes.lista.forEach((m, i) => cartao(110 + i * 52, missaoTxt(m), m.prog, m.alvo, m.premio, m.feito, null, '🎯'));
+    if (!desafio || desafio.semana !== semanaStr()) carregarDesafio();
+    { const D = desafioDef(); ctx.font = `15px ${UI}`; ctx.fillStyle = '#ff9f1a'; ctx.textBaseline = 'alphabetic'; ctx.fillText('⭐ DESAFIO DA SEMANA', L, 284);
+      cartao(292, D.txt(D.alvo), desafio.prog, D.alvo, D.premio, desafio.feito, '#ff9f1a', '⭐'); }
     const agora = new Date(), meia = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1), falta = Math.max(0, meia - agora);
     ctx.textAlign = 'left'; ctx.font = `14px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.65)';
-    ctx.fillText(`Novas missões em ${Math.floor(falta / 3600000)} h ${Math.floor(falta / 60000) % 60} min`, L, 320);
+    ctx.fillText(`Novas missões em ${Math.floor(falta / 3600000)} h ${Math.floor(falta / 60000) % 60} min`, L, 356);
     // medalhas
     const R = 610, got = stats.got.length;
     ctx.font = `20px ${UI}`; ctx.fillStyle = '#ffd23a'; ctx.fillText(`🏅 MEDALHAS  ${got}/${MEDALHAS.length}`, R, 100);
@@ -1714,20 +1820,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       { deck: null, bar: [290, 228], grip: [[259, 243], [290, 228]] }, { deck: null, bar: [277, 226], grip: [[220, 236], [277, 226]] },
       { deck: [204, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
   const scooterOn = () => loja.loc === 'patinete' && ok(SCOOT_IMG);
-  // BMX: só o mascote nas poses (Gemini 12-v3); a bicicleta é desenhada em 3D pelo código (drawBmx3D), sempre igual.
-  // células de 400 px (fruta 112 px, centro em 200,150): 0 em pé nos pedais, 1 agachado, 2 bunny hop, 3 superman, 4 no-hander, 5 tailwhip.
-  // pes = ponto médio dos tênis (eixo do pedivela), ang = inclinação da linha dos pés, dist = distância entre eles,
-  // maos = ponto das mãos (guidão); solto = pés fora dos pedais (a bicicleta se prende pelas mãos)
-  const BMX_IMG = new Image();                                              // BMX fora do jogo: não baixa mais (src era assets/mascote-bmx.webp)
-  const BX = { size: 400, poses: [
-    { pes: [209, 255], ang: 0.585, dist: 30, maos: [275, 170] },
-    { pes: [212, 224], ang: 0.000, dist: 0, maos: [241, 169] },
-    { pes: [189, 241], ang: 0.000, dist: 0, maos: [263, 172] },
-    { pes: [106, 214], ang: -0.763, dist: 36, maos: [267, 176], solto: true },
-    { pes: [212, 221], ang: 0.000, dist: 0, maos: null },
-    { pes: [210, 197], ang: -0.078, dist: 120, maos: [272, 156], solto: true }] };
-  const bmxOn = () => loja.loc === 'bmx' && ok(BMX_IMG);
-  const wheels = () => skateOn() || scooterOn() || bmxOn();                 // sobre rodas: obstáculos, grind, rampas…
+  const wheels = () => skateOn() || scooterOn();                 // sobre rodas: obstáculos, grind, rampas…
 
   // estampa do skate: a imagem de lado é recolorida (faixa vermelha → cor base, faixa amarela → cor da faixa)
   const curShape = () => SHAPES.find(x => x.id === loja.shape) || SHAPES[0];
@@ -1874,7 +1967,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const fl = wheels() && state === 'running' ? floorAt(PX) : 0;          // sombra em cima do patamar/rampa
     ctx.beginPath(); ctx.ellipse(ox, GROUND - fl + 3, (dead && player.landedDead ? 42 : 28) * sh, 5 * sh, 0, 0, TAU); ctx.fill();
 
-    if (bmxOn() && !dead) { drawBmxRider(ox, oy, tint); return; }
     if (scooterOn() && !dead) { drawScooterRider(ox, oy, tint); return; }
     if (skateOn() && !dead) { drawSkater(ox, oy, tint, X); return; }
     if (boardFly && dead) drawBoardFly();
@@ -2075,159 +2167,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       dust(ox - 92 * k, oy, 1, .5); if (Math.random() < .5) dust(ox + 80 * k, oy, 1, .5);
     }
   }
-  // ---------------- BMX desenhada em 3D (igual ao skate e ao patinete: sempre a mesma) ----------------
-  // medidas em px da célula de 400 (×k na tela); origem no chão embaixo do meio da bicicleta; x para frente, y para cima,
-  // z para perto da câmera. o: { bar: [x, y] guidão (entre as mãos), crank: ângulo do pedivela, spin: giro das rodas,
-  //   whip: giro do quadro em volta do guidão (tailwhip) }
-  const BMX_S = .8;                                                         // tamanho da BMX em relação à geometria BM
-  const BMX_RODA = new Image();                                             // (BMX fora do jogo; era assets/bmx-roda.webp)   // roda recortada da BMX renderizada (ferramentas/roda-bmx-3d.py)
-  const BM = { R: 46, rear: -86, front: 86, bb: [-9.4, 50.5], seat: [-31, 124], head0: [66.9, 95.3], head1: [57.1, 124.1], crankL: 22, pitch: .3,
-    bar: [44, 150], frame: '#d7262b', frameDark: '#7a0f13', rim: '#f2c41f' };
-  function drawBmx3D(k, o = {}) {
-    const cp = Math.cos(BM.pitch), sp = Math.sin(BM.pitch), cw = Math.cos(o.whip || 0), sw = Math.sin(o.whip || 0), hx = BM.head0[0];
-    const P = (x, y, z = 0, rot) => {
-      if (rot) { const dx = x - hx; x = hx + dx * cw + z * sw; z = -dx * sw + z * cw; }
-      return [x * k, -(y * cp - z * sp) * k, y * sp + z * cp];
-    };
-    const line = (a, b, col, w) => { ctx.strokeStyle = col; ctx.lineWidth = w * k; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
-    const off = (a, d) => [a[0], a[1] + d * k];
-    // tubo pintado com volume: contorno escuro, sombra embaixo, vermelho, reflexo em cima (luz de cima à esquerda)
-    const tube = (a, b, w = 7) => { line(a, b, BM.frameDark, w + 2.5); line(a, b, '#a8141b', w); line(off(a, -w * .12), off(b, -w * .12), BM.frame, w * .72); line(off(a, -w * .3), off(b, -w * .3), '#ff6f5f', w * .22); line(off(a, -w * .33), off(b, -w * .33), 'rgba(255,255,255,.7)', w * .08); };
-    // peça cromada: contorno, cinza, faixa clara e reflexo branco
-    const chrome = (a, b, w) => { line(a, b, '#4a525a', w + 1.5); line(a, b, '#9aa3ab', w); line(off(a, -w * .15), off(b, -w * .15), '#e3e8ec', w * .55); line(off(a, -w * .28), off(b, -w * .28), '#ffffff', w * .18); };
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const spin = o.spin || 0, R = BM.R;
-    if (ok(VEI['bmx-quadro']) && ok(VEI['bmx-roda'])) {                    // peças 3D (ChatGPT) encaixadas pelo código
-      const PQ = (x, y) => P(x, y, 0, true), PF = (x, y) => P(x, y, 0, false), ca = o.crank || 0;
-      const ped = VEI['bmx-pedal'], pw = 15 * k, ph = 7.5 * k;
-      // pedivela: eixo no movimento central, linha dos pedais no ângulo ca (pontas medidas na imagem)
-      const crankAt = img => piece(img, PQ, [87.2, 39.2], [203.2, 59.2], BM.bb, [BM.bb[0] + Math.cos(ca) * 2 * BM.crankL, BM.bb[1] - Math.sin(ca) * 2 * BM.crankL]);
-      const cm = crankAt(null), pFar = PQ(...cm(20, 36)), pNear = PQ(...cm(136, 56));
-      if (ok(ped)) { ctx.save(); ctx.filter = 'brightness(.7)'; ctx.drawImage(ped, pFar[0] - pw / 2, pFar[1] - ph / 2, pw, ph); ctx.restore(); }   // pedal de longe
-      const wheel3 = (x, rot) => {
-        const [cx, cy] = P(x, R, 0, rot), sq = rot ? Math.max(.2, Math.abs(cw)) : 1, r = R * k;
-        ctx.save(); ctx.translate(cx, cy); ctx.scale(sq, 1); ctx.rotate(spin); ctx.drawImage(VEI['bmx-roda'], -r, -r * 1.0125, 2 * r, 2 * r * 1.0125); ctx.restore();
-        chrome(P(x, R, -8, rot), P(x, R, 12, rot), 5.5);                     // pino (peg)
-      };
-      wheel3(BM.rear, true); wheel3(BM.front, false);
-      const FORK = [[183, 38], [222, 38], [222, 114], [196, 114], [186, 62]];   // garfo (não gira no tailwhip)
-      piece(VEI['bmx-quadro'], PQ, [10, 102], [212.5, 103.5], [BM.rear, R], [BM.front, R], 1, null, { pts: FORK, out: true });
-      piece(VEI['bmx-quadro'], PF, [10, 102], [212.5, 103.5], [BM.rear, R], [BM.front, R], 1, null, { pts: FORK });
-      crankAt(VEI['bmx-pedivela']);
-      if (ok(ped)) ctx.drawImage(ped, pNear[0] - pw / 2, pNear[1] - ph / 2, pw, ph);                                                   // pedal de perto
-      const bar = o.bar || BM.bar;
-      piece(VEI['bmx-guidao'], PF, [95, 92.5], [95, 12.5], [BM.head1[0] - 1, BM.head1[1] + 4], bar, .7);                          // guidão (visto de lado, estreitado)
-      ctx.lineCap = 'butt'; return;
-    }
-    const wheel = (x, rot) => {
-      const [cx, cy] = P(x, R, 0, rot), sq = rot ? Math.max(.2, Math.abs(cw)) : 1, r = R * k;
-      ctx.save(); ctx.translate(cx, cy); ctx.scale(sq, 1);
-      if (ok(BMX_RODA)) {                                                    // roda renderizada (pneu com cravos + aro), girando
-        ctx.strokeStyle = 'rgba(205,212,220,.9)'; ctx.lineWidth = .9 * k;                                                                  // raios cruzados
-        for (let i = 0; i < 24; i++) { const a = i / 24 * TAU + spin, d = i % 2 ? .38 : -.38; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4.5 * k, Math.sin(a) * 4.5 * k); ctx.lineTo(Math.cos(a + d) * r * .71, Math.sin(a + d) * r * .71); ctx.stroke(); }
-        ctx.save(); ctx.rotate(spin); ctx.drawImage(BMX_RODA, -r, -r, 2 * r, 2 * r); ctx.restore();
-        const g = ctx.createRadialGradient(-r * .4, -r * .5, r * .15, 0, 0, r);                                                             // luz fixa de cima à esquerda
-        g.addColorStop(0, 'rgba(255,255,255,.22)'); g.addColorStop(.55, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,.28)');
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.arc(0, 0, r * .7, 0, TAU, true); ctx.fillStyle = g; ctx.fill();
-      } else {
-        ctx.beginPath(); ctx.arc(0, 0, r - 5 * k, 0, TAU); ctx.strokeStyle = '#18181b'; ctx.lineWidth = 10 * k; ctx.stroke();               // pneu (vazado)
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * k; ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2 * k; for (let i = 0; i < 18; i++) { const a = i / 18 * TAU + spin; ctx.beginPath(); ctx.arc(0, 0, r - 2.5 * k, a, a + .12); ctx.stroke(); }   // cravos do pneu
-        ctx.beginPath(); ctx.arc(0, 0, r - 11 * k, 0, TAU); ctx.strokeStyle = BM.rim; ctx.lineWidth = 4.5 * k; ctx.stroke();                 // aro amarelo
-        ctx.beginPath(); ctx.arc(0, 0, r - 13.5 * k, 0, TAU); ctx.strokeStyle = 'rgba(120,80,0,.6)'; ctx.lineWidth = 1 * k; ctx.stroke();
-        ctx.strokeStyle = 'rgba(210,216,222,.85)'; ctx.lineWidth = 1 * k;                                                                    // raios girando
-        for (let i = 0; i < 12; i++) { const a = i / 12 * TAU + spin; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 4 * k, Math.sin(a) * 4 * k); ctx.lineTo(Math.cos(a + .5) * (r - 12 * k), Math.sin(a + .5) * (r - 12 * k)); ctx.stroke(); }
-      }
-      const hg = ctx.createRadialGradient(-1.5 * k, -1.5 * k, .5 * k, 0, 0, 6 * k); hg.addColorStop(0, '#ffffff'); hg.addColorStop(.5, '#b9c0c6'); hg.addColorStop(1, '#5e6870');   // cubo cromado
-      ctx.beginPath(); ctx.arc(0, 0, 6 * k, 0, TAU); ctx.fillStyle = hg; ctx.fill();
-      ctx.restore();
-      chrome(P(x, R, -8, rot), P(x, R, 12, rot), 5.5);   // pino (peg)
-    };
-    const ca = o.crank || 0, crank = s => [BM.bb[0] + Math.cos(ca + s) * BM.crankL, BM.bb[1] - Math.sin(ca + s) * BM.crankL];
-    const pedal = (q, z) => { const [x, y] = P(q[0], q[1], z, true); ctx.fillStyle = '#111'; ctx.fillRect(x - 7.5 * k, y - 3 * k, 15 * k, 6 * k); ctx.fillStyle = '#2c2c30'; ctx.fillRect(x - 6.5 * k, y - 2.2 * k, 13 * k, 3 * k); ctx.fillStyle = '#e8a33a'; ctx.fillRect(x - 6.5 * k, y + .8 * k, 3 * k, 1.6 * k); ctx.fillRect(x + 3.5 * k, y + .8 * k, 3 * k, 1.6 * k); };   // pedal com refletores
-    // lado de longe: pedivela e pedal de trás
-    const qf = crank(Math.PI); line(P(BM.bb[0], BM.bb[1], -6, true), P(qf[0], qf[1], -6, true), '#8d969e', 4); pedal(qf, -10);
-    wheel(BM.rear, true); wheel(BM.front, false);
-    // quadro
-    const Q = (pt, z = 0) => P(pt[0], pt[1], z, true);
-    const bb = Q(BM.bb), seat = Q(BM.seat), sc = Q([BM.seat[0] + 8, BM.seat[1] - 14]), h0 = Q(BM.head0), h1 = Q(BM.head1), ra = Q([BM.rear, R]);
-    tube(ra, bb, 6); tube(ra, sc, 5.5); tube(bb, sc, 7); tube(sc, h1, 7.5); tube(bb, h0, 8.5);
-    chrome(P(hx + 2, BM.head1[1] + 4), P(BM.front, R), 5.5);   // garfo
-    tube(h0, h1, 9);                                                                                                         // caixa de direção
-    // coroa, corrente e banco
-    { const cg = ctx.createRadialGradient(bb[0] - 3 * k, bb[1] - 4 * k, k, bb[0], bb[1], 12 * k); cg.addColorStop(0, '#ffffff'); cg.addColorStop(.45, '#c9d0d6'); cg.addColorStop(1, '#6b737b');   // coroa cromada dentada
-      ctx.beginPath(); for (let i = 0; i < 28; i++) { const a = i / 28 * TAU + (o.crank || 0), rr = (i % 2 ? 12 : 10.6) * k; ctx.lineTo(bb[0] + Math.cos(a) * rr, bb[1] + Math.sin(a) * rr); } ctx.closePath();
-      ctx.fillStyle = cg; ctx.fill(); ctx.strokeStyle = '#4a525a'; ctx.lineWidth = 1.2 * k; ctx.stroke(); }
-    ctx.beginPath(); ctx.arc(bb[0], bb[1], 4 * k, 0, TAU); ctx.fillStyle = '#5e6870'; ctx.fill();
-    line([bb[0], bb[1] - 11 * k], [ra[0], ra[1] - 5 * k], 'rgba(70,76,82,.9)', 1.6); line([bb[0], bb[1] + 11 * k], [ra[0], ra[1] + 5 * k], 'rgba(70,76,82,.9)', 1.6);
-    chrome(sc, seat, 3.8);
-    ctx.save(); ctx.translate(seat[0], seat[1]); ctx.rotate(-.12); ctx.beginPath(); ctx.ellipse(0, -2 * k, 17 * k, 5.5 * k, 0, 0, TAU); ctx.fillStyle = '#1e1e22'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1 * k; ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(-3 * k, -4.5 * k, 10 * k, 1.6 * k, 0, 0, TAU); ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.fill(); ctx.restore();   // banco com brilho
-    // guidão (riser) até o ponto das mãos
-    const bar = o.bar || BM.bar, top = P(BM.head1[0] + 2, BM.head1[1] + 8), bp = P(bar[0], bar[1]);
-    chrome(P(BM.head1[0], BM.head1[1]), top, 5.5);           // mesa
-    chrome(top, bp, 4.2);                                                              // guidão subindo
-    chrome([bp[0] - 12 * k, bp[1]], [bp[0] + 14 * k, bp[1]], 4.2);
-    line([bp[0] + 4 * k, bp[1]], [bp[0] + 16 * k, bp[1]], '#000', 8.5); line([bp[0] + 4 * k, bp[1]], [bp[0] + 16 * k, bp[1]], '#1c1c20', 7); line([bp[0] + 5 * k, bp[1] - 2 * k], [bp[0] + 15 * k, bp[1] - 2 * k], 'rgba(255,255,255,.3)', 1.4);   // manopla com brilho
-    // lado de perto: pedivela e pedal da frente
-    const qn = crank(0); chrome(P(BM.bb[0], BM.bb[1], 8, true), P(qn[0], qn[1], 8, true), 4); pedal(qn, 12);
-    ctx.lineCap = 'butt';
-  }
-  // ---------------- BMX: mascote + bicicleta 3D ----------------
-  function bmxFrame() {
-    if (state === 'ready' || state === 'shop') return 0;
-    if (player.grind) return player.grind.g.f;
-    if (player.ground) return player.slide ? 1 : 0;
-    if (player.spin >= 0 && player.trick && TRICKS[player.trick].bx != null) return TRICKS[player.trick].bx;
-    return 2;                                                                // no ar: bunny hop
-  }
-  // desenha a BMX e o mascote com a origem no chão, embaixo do meio da bicicleta
-  function drawBmxPose(f, k, tintKey, o = {}) {
-    const P0 = BX.poses[f] || BX.poses[0], z = k, kb = k * BMX_S;           // a bicicleta é desenhada a BMX_S do tamanho (mascote 3D é mais baixinho)
-    let bb = BM.bb, bar, X0, Y0;
-    if (P0.solto) {                                                          // pés fora: a bicicleta fica presa nas mãos
-      bar = BM.bar; X0 = bar[0] * kb - P0.maos[0] * z; Y0 = -bar[1] * kb - P0.maos[1] * z;
-    } else {
-      X0 = bb[0] * kb - P0.pes[0] * z; Y0 = -bb[1] * kb - P0.pes[1] * z;   // pés no eixo do pedivela
-      bar = P0.maos ? [bb[0] + (P0.maos[0] - P0.pes[0]) / BMX_S, bb[1] + (P0.pes[1] - P0.maos[1]) / BMX_S] : BM.bar;
-    }
-    const half = P0.solto || !P0.dist ? BM.crankL : clamp(P0.dist / 2 / BMX_S, 14, 28);
-    const crank = P0.solto ? (o.crank || 0) : -P0.ang;
-    const keep = BM.crankL; BM.crankL = half;
-    const f0 = ctx.filter; if (f0 && f0 !== 'none') ctx.filter = 'none';      // arco-íris não pinta a bicicleta
-    drawBmx3D(kb, { bar, crank, spin: o.spin || 0, whip: o.whip || 0 });
-    ctx.filter = f0 || 'none';
-    BM.crankL = keep;
-    if (ok(BMX_IMG)) { accOverlay('bmx', f, X0, Y0, z, true); ctx.drawImage(tinted(accImg('bmx') || BMX_IMG, tintKey), f * BX.size, 0, BX.size, BX.size, X0, Y0, BX.size * z, BX.size * z); accOverlay('bmx', f, X0, Y0, z, false); }
-  }
-  function drawBmxRider(ox, oy, tint) {
-    const k = SP.scale, f = bmxFrame(), T = player.spin >= 0 && player.trick && TRICKS[player.trick];
-    const tilt = player.ground || player.grind ? 0 : clamp(-player.vy / 2400, -.2, .24);
-    const e = .5 - .5 * Math.cos(Math.PI * clamp(player.spin, 0, 1));
-    const flip = T && T.flip ? -e * T.flip * TAU : 0;                        // backflip: tudo gira para trás
-    const whip = T && T.whip ? e * T.whip * TAU : 0;                         // tailwhip: o quadro gira em volta do guidão
-    const spin = (dist || t * 300) / (BM.R * k * BMX_S);
-    const bob = player.ground && state === 'running' ? Math.abs(Math.sin(t * 16)) * 1.2 : 0;
-    const bx0 = 18 * k;                                                      // meio da bicicleta um pouco à frente do mascote
-    const draw = (x, y, r, a) => {
-      ctx.save(); ctx.globalAlpha *= a; ctx.translate(x + bx0, y - bob);
-      if (player.grind && state === 'running') {                             // grind nos pinos: inclina na descida e no pino de trás
-        const g = player.grind.g; ctx.rotate(player.grind.slope);
-        if (g.tilt) { const tx = BM.rear * k * BMX_S, ty = -BM.R * k * BMX_S; ctx.translate(tx, ty); ctx.rotate(g.tilt); ctx.translate(-tx, -ty); }
-      } else if (player.ground && player.slope && state === 'running') ctx.rotate(-player.slope);
-      if (r) { const cy = -80 * k; ctx.translate(0, cy); ctx.rotate(r); ctx.translate(0, -cy); }
-      drawBmxPose(f, k, tint, { spin, whip });
-      ctx.restore();
-    };
-    const rot = tilt + flip;
-    if (player.spin >= 0) {                                                  // rastro da manobra
-      const tr = player.trail || (player.trail = []);
-      if (state === 'running' && !ghostPass) { tr.forEach(g => g.x -= speed / 60 * .55); tr.push({ x: ox, y: oy, r: rot }); if (tr.length > 5) tr.shift(); }
-      tr.slice(0, -1).forEach((g, i, a) => draw(g.x, g.y, g.r, .07 + .2 * (i + 1) / a.length));
-    } else if (player.trail) player.trail.length = 0;
-    draw(ox, oy, rot, 1);
-    if (state === 'running' && player.ground && !ghostPass && Math.random() < .4) { dust(ox + bx0 + BM.rear * k, oy, 1, .6); if (Math.random() < .5) dust(ox + bx0 + BM.front * k, oy, 1, .6); }
-  }
   // ---------------- patinete desenhado em 3D ----------------
   // coordenadas do patinete: x para frente, y para cima, z para perto da câmera (px da célula de 400, origem no topo da base)
   const SCG = { half: 62, th: 9, w: 15, rear: -73, front: 86, ay: -12, r: 19, hx: 80, hy: 42, pitch: .3 };
@@ -2393,7 +2332,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function drawBoardFly() {
     const b = boardFly, k = SP.scale, B = SK.shape;
-    if (b.bmx) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.translate(0, 60 * k * BMX_S); drawBmx3D(k * BMX_S, { spin: b.r * 2 }); ctx.restore(); return; }
     if (b.scooter) { ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); drawScooter(k, [SC.cx, SC.bot - 31, 0], null, 0, -10); ctx.restore(); return; }
     if (!ok(SKATE_SHAPE)) return;
     ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.drawImage(shapeImg(), -B.w / 2 * k, -B.h / 2 * k, B.w * k, B.h * k); ctx.restore();
@@ -2998,8 +2936,13 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const BIOMES_ON = true;                                                    // religado a pedido do usuário (2026-11-09)
   const BIOMES = ['campo', 'canavial', 'cidade', 'fabrica'];
   const BIOME_NAME = { canavial: '🏛️ ATHENAS PAULISTA', cidade: '🏙️ CIDADE', fabrica: '🏭 DENTRO DA FÁBRICA', campo: '🌳 CAMPO' };
+  // imagens que só aparecem depois de 400 m (Athenas, cidade, fábrica): baixam DEPOIS que o jogo abre (carregarTarde),
+  // assim a tela de carregamento espera só o necessário para começar no campo
+  const TARDE = [];
+  const tarde = (im, src, prep) => { TARDE.push([im, src, prep]); return im; };
   const TRECHO = {};
-  if (BIOMES_ON) ['canavial', 'cidade', 'fabrica'].forEach(n => { const i = new Image(); i.src = 'assets/cenario/trecho-' + n + '.webp'; TRECHO[n] = i; });
+  if (BIOMES_ON) ['canavial', 'cidade', 'fabrica'].forEach(n => { TRECHO[n] = tarde(new Image(), 'assets/cenario/trecho-' + n + '.webp',
+    im => n === 'fabrica' ? (bgSoft(im, FAB_MUTE), fabTeto()) : bgSoft(im, BG_MUTE)); });
   const SEG = 400, FADE = 60;
   let lastBiome = 'campo';
   function biomeIndex(m) { const k = Math.floor(m / SEG); return k < BIOMES.length ? k : 1 + (k - 1) % (BIOMES.length - 1); }
@@ -3170,10 +3113,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   ];
   const FG_TOTAL = FG_CELLS.reduce((a, c) => a + c[5], 0);
   // dentro da fábrica: pilar, engradados, bombona, extintor, cone, fardo, paleteira, cavalete (Gemini 14B)
-  const PISO_FAB = new Image(); PISO_FAB.src = 'assets/cenario/piso-fabrica.webp';
-  const PISO_CID = new Image(); PISO_CID.src = 'assets/cenario/piso-cidade.webp';
-  const PISO_AV = new Image(); PISO_AV.src = 'assets/cenario/piso-avenida.webp';
-  const FG_FAB_IMG = new Image(); FG_FAB_IMG.src = 'assets/cenario/primeiro-plano-fabrica.webp';
+  const PISO_FAB = tarde(new Image(), 'assets/cenario/piso-fabrica.webp');
+  const PISO_CID = tarde(new Image(), 'assets/cenario/piso-cidade.webp');
+  const PISO_AV = tarde(new Image(), 'assets/cenario/piso-avenida.webp');
+  const FG_FAB_IMG = tarde(new Image(), 'assets/cenario/primeiro-plano-fabrica.webp', im => blurred(im, 1.4));
   const FG_FAB_CELLS = [
     [0, 0, 51, 180, 330, 1],    // pilar amarelo
     [59, 0, 133, 180, 128, 3],    // engradados
@@ -3774,101 +3717,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.restore();
   }
   // ---- escudo ----
-  const SH_R = 64;
-  // mede onde o mascote está DESENHADO agora (qualquer pose, manobra ou veículo): desenha num canvas pequeno e procura os pixels
-  // visíveis; o escudo usa o centro e o raio que cobrem tudo (cresce na hora, encolhe devagar)
-  const SHF = { c: null, g: null, x: 0, y: 0, r: SH_R, n: 0, ok: false };
-  function shieldFit(cy0) {
-    const Q = .25, WW = 320, HH = 320, top = GROUND - player.y - 250;          // janela do mundo em volta do mascote, a 1/4 do tamanho
-    if (!SHF.c) { SHF.c = document.createElement('canvas'); SHF.c.width = WW * Q; SHF.c.height = HH * Q; SHF.g = SHF.c.getContext('2d', { willReadFrequently: true }); }
-    if (SHF.ok && SHF.n++ % 2) return SHF;
-    const g = SHF.g, real = ctx, gp = ghostPass;
-    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, SHF.c.width, SHF.c.height);
-    g.setTransform(Q, 0, 0, Q, -(PX - WW / 2) * Q, -top * Q);
-    ctx = g; ghostPass = true;
-    try { drawMascot(); } catch (e) {} finally { ctx = real; ghostPass = gp; g.filter = 'none'; g.globalAlpha = 1; }
-    let d; try { d = g.getImageData(0, 0, SHF.c.width, SHF.c.height).data; } catch (e) { return SHF; }
-    const w = SHF.c.width, h = SHF.c.height; let x1 = w, x2 = -1, y1 = h, y2 = -1;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 60) { if (x < x1) x1 = x; if (x > x2) x2 = x; if (y < y1) y1 = y; if (y > y2) y2 = y; }
-    if (x2 < 0) return SHF;
-    const cx = (x1 + x2 + 1) / 2, cyy = (y1 + y2 + 1) / 2; let m = 0;
-    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) if (d[(y * w + x) * 4 + 3] > 60) { const dd = (x + .5 - cx) ** 2 + (y + .5 - cyy) ** 2; if (dd > m) m = dd; }
-    const wx = PX - WW / 2 + cx / Q, wy = top + cyy / Q, wr = Math.sqrt(m) / Q + 10, wt = top + y1 / Q;
-    if (!SHF.ok) { SHF.x = wx; SHF.y = wy; SHF.top = wt; SHF.r = Math.max(SH_R, wr); SHF.ok = true; }
-    else { SHF.x = lerp(SHF.x, wx, .6); SHF.y = lerp(SHF.y, wy, .6); SHF.top = lerp(SHF.top, wt, .6); SHF.r = wr > SHF.r ? wr : lerp(SHF.r, Math.max(SH_R, wr), .12); }
-    return SHF;
-  }
-  let shieldTexC = null;
-  function shieldTex() {                                                     // cúpula de hexágonos feita uma vez (canvas), mais forte na borda
-    if (shieldTexC) return shieldTexC;
-    const R = SH_R * 2, S = 2 * R + 8, c = document.createElement('canvas'); c.width = c.height = S;
-    const g = c.getContext('2d'), o = S / 2, hs = 15;                        // hs = raio do hexágono (canvas em 2× para ficar nítido)
-    g.strokeStyle = 'rgba(170,240,255,1)'; g.lineWidth = 2.6;
-    for (let row = -12; row <= 12; row++) for (let col = -12; col <= 12; col++) {
-      const x = o + col * hs * 1.5, y = o + row * hs * Math.sqrt(3) + (col % 2 ? hs * Math.sqrt(3) / 2 : 0);
-      const d = Math.hypot(x - o, y - o); if (d > R + hs) continue;
-      const bulge = 1 - Math.pow(d / R, 2) * .35;                            // hexágonos encolhem perto da borda (parece esfera)
-      g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; const px = o + (x - o) * (1 - .12 * d / R) + Math.cos(a) * hs * .86 * bulge, py = o + (y - o) * (1 - .12 * d / R) + Math.sin(a) * hs * .86 * bulge; i ? g.lineTo(px, py) : g.moveTo(px, py); } g.closePath(); g.stroke();
-    }
-    g.globalCompositeOperation = 'destination-in';                            // efeito "fresnel": some no meio, forte na borda
-    const m = g.createRadialGradient(o, o, 0, o, o, R);
-    m.addColorStop(0, 'rgba(0,0,0,.06)'); m.addColorStop(.55, 'rgba(0,0,0,.18)'); m.addColorStop(.85, 'rgba(0,0,0,.75)'); m.addColorStop(1, 'rgba(0,0,0,1)');
-    g.fillStyle = m; g.beginPath(); g.arc(o, o, R, 0, TAU); g.fill();
-    return (shieldTexC = c);
-  }
-  // anel 3D (folha do ChatGPT) inclinado em órbita; front = metade da frente (embaixo) ou de trás (em cima)
-  function shieldOrbit(F, front) {
-    const im = FX.escudo; if (!ok(im)) return;
-    const w = F.r * 2.7, h = w * im.naturalHeight / im.naturalWidth, tilt = -.32 + Math.sin(t * 1.3) * .06;
-    ctx.save(); ctx.translate(F.x, F.y + F.r * .06); ctx.rotate(tilt);
-    ctx.beginPath(); front ? ctx.rect(-200, 0, 400, 200) : ctx.rect(-200, -200, 400, 200); ctx.clip();
-    ctx.scale(1, .26); ctx.rotate(t * 2.2); ctx.globalAlpha = front ? .95 : .55;
-    ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore();
-  }
-  function drawShield(F) {
-    const r = F.r + Math.sin(t * 6) * 1.8, x = F.x, y = F.y;
-    ctx.save();
-    // corpo da bolha: quase transparente no meio, ciano na borda
-    const g = ctx.createRadialGradient(x - r * .3, y - r * .35, r * .1, x, y, r);
-    g.addColorStop(0, 'rgba(255,255,255,.18)'); g.addColorStop(.6, 'rgba(110,210,255,.07)'); g.addColorStop(.88, 'rgba(90,200,255,.22)'); g.addColorStop(1, 'rgba(160,235,255,.55)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-    // hexágonos girando devagar
-    ctx.save(); ctx.translate(x, y); ctx.rotate(t * .35); ctx.globalAlpha = .7 + Math.sin(t * 4) * .15;
-    const T = shieldTex(), sz = r * 2 + 4; ctx.drawImage(T, -sz / 2, -sz / 2, sz, sz); ctx.restore();
-    // faixa de luz varrendo a bolha a cada 2,4 s
-    const ph = (t % 2.4) / 2.4;
-    if (ph < .45) {
-      const k = ph / .45, bx = x - r * 1.6 + k * r * 3.2;
-      ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
-      const lg = ctx.createLinearGradient(bx - 22, y - 22, bx + 22, y + 22);
-      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(.5, `rgba(220,250,255,${.45 * Math.sin(k * Math.PI)})`); lg.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = lg; ctx.fillRect(x - r, y - r, r * 2, r * 2); ctx.restore();
-    }
-    // borda brilhante com halo
-    ctx.shadowColor = 'rgba(80,210,255,.9)'; ctx.shadowBlur = 14;
-    ctx.strokeStyle = 'rgba(190,245,255,.95)'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(x, y, r - 6, Math.PI * 1.08, Math.PI * 1.42); ctx.stroke();                      // reflexo grande em cima à esquerda
-    ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r - 6, Math.PI * .12, Math.PI * .26); ctx.stroke();     // reflexo pequeno embaixo à direita
-    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.ellipse(x - r * .5, y - r * .62, 7, 3.5, -.7, 0, TAU); ctx.fill();
-    ctx.restore();
-    shieldOrbit(F, true);
-    for (let i = 0; i < 3; i++) {                                              // brilhinhos na superfície
-      const a = t * .9 + i * TAU / 3, k = .6 + Math.sin(t * 7 + i * 2) * .4;
-      ctx.save(); ctx.globalAlpha = k; fx('brilho', x + Math.cos(a) * r * .92, y + Math.sin(a) * r * .92, 10 + k * 8); ctx.restore();
-    }
-  }
   // escudo segurou a batida: estoura em cacos de hexágono + onda
   function shieldBurst() {
-    const cx = SHF.ok ? SHF.x : PX, cy = SHF.ok ? SHF.y : GROUND - player.y - 58, R = SHF.ok ? SHF.r : SH_R;
+    const cx = PX, cy = GROUND - player.y - 58, R = 64;
     for (let i = 0; i < 16; i++) { const a = i / 16 * TAU + Math.random() * .3, v = 220 + Math.random() * 200;
       particles.push({ type: 'hexshard', x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .6, max: .6, r: 5 + Math.random() * 4, rot: Math.random() * TAU, vr: (Math.random() - .5) * 14 }); }
     particles.push({ type: 'shockwave', x: cx, y: cy, life: .4, max: .4, r: R });
   }
   // 2026-11-19 (pedido do usuário): os poderes NÃO têm mais efeito em volta do mascote (escudo, ondas do ímã, anéis do lento,
   // rastro do turbo, estrelas do x2, faíscas do pulo); só os ícones 3D numa fileira EM CIMA do mascote. A fruta continua
-  // mudando de cor (tinted). Funções antigas do escudo (drawShield/shieldOrbit/shieldTex) ficaram sem uso.
+  // mudando de cor (tinted).
   const POWER_ICON = { turbo: 'raio', escudo: 'escudo', dobro: 'x2', ima: 'ima', pulo: 'asa', lento: 'relogio' };
   function drawPowerIcon(n, x, y, i) {
     const bob = Math.sin(t * 4 + i * 1.7) * 3;
@@ -3914,24 +3772,6 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       drawPowerIcon(POWER_ICON[k], x, y, i);
     });
   }
-  // poderes ativos no canto (2026-11-18: maior e legível): pílula escura com garrafa, nome, barra e segundos restantes
-  function drawSkillHud(ink) {
-    // 2026-11-19: chips compactos em FILEIRA no alto (ícone 3D do poder, segundos e barra). Antes empilhava para baixo e,
-    // com muitos poderes, ficava em cima do mascote. 6 chips cabem antes dos botões de pausa/som do meio.
-    let x = 10; const y = 50, w = 78;
-    for (const k of POWER_ORDER) {
-      if (!(skills[k] > 0)) continue;
-      const sk = SKILLS[k], frac = clamp(skills[k] / sk.dur, 0, 1);
-      ctx.fillStyle = 'rgba(10,20,30,.55)'; rr(x, y - 2, w, 34, 17); ctx.fill();
-      ctx.strokeStyle = sk.color; ctx.lineWidth = 2; ctx.stroke();
-      drawPowerIcon(POWER_ICON[k], x + 17, y + 15, 0);
-      ctx.font = `16px ${UI}`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
-      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(Math.ceil(skills[k]) + 's', x + w - 9, y + 15); ctx.fillStyle = '#ffffff'; ctx.fillText(Math.ceil(skills[k]) + 's', x + w - 9, y + 15);
-      ctx.fillStyle = 'rgba(255,255,255,.22)'; rr(x + 36, y + 21, w - 45, 6, 3); ctx.fill();
-      ctx.fillStyle = sk.color; rr(x + 36, y + 21, (w - 45) * frac, 6, 3); ctx.fill();
-      x += w + 5;
-    }
-  }
   // aviso grande no meio da tela quando pega um poder: nome + o que ele faz
   let powerBanner = null;
   function drawPowerBanner() {
@@ -3950,7 +3790,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const pad = n => String(n).padStart(5, '0');
     const show = flash === 0 || Math.floor(flash * 10) % 2 === 0;
     const ink = dark > .5 || biomeWeights().fabrica > .5 ? '#eaf5e9' : '#063d27';   // claro à noite e no teto escuro da fábrica
-    if (state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals') return;   // nos menus o painel já mostra pontos e recorde
+    if (state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals' || state === 'ajustes') return;   // nos menus o painel já mostra pontos e recorde
     ctx.textAlign = 'right';
     ctx.globalAlpha = .6; ctx.fillStyle = ink; ctx.fillText('HI ' + pad(best), W - 130, 16); ctx.globalAlpha = 1;
     if (show) { ctx.fillStyle = skills.dobro > 0 ? SKILLS.dobro.color : ink; ctx.fillText(pad(score), W - 20, 16); }
@@ -4059,7 +3899,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   function menu() {
     menuButtons = [];
-    if (state !== 'ready' && state !== 'paused' && state !== 'over' && state !== 'shop' && state !== 'rank' && state !== 'goals') { menuState = ''; return; }
+    if (state !== 'ready' && state !== 'paused' && state !== 'over' && state !== 'shop' && state !== 'rank' && state !== 'goals' && state !== 'ajustes') { menuState = ''; return; }
     if (state !== menuState) { menuState = state; menuStart = t; }
     const mt = t - menuStart, cx = W / 2;
     ctx.save();
@@ -4084,6 +3924,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       walletChip(186, 22);
       if (RANK_ON) gameButton('rank', 96, 92, 150, 42, '🏆  RANKING', 'ghost');
       gameButton('goals', 96, RANK_ON ? 144 : 92, 150, 42, '🎯  MISSÕES', 'ghost');
+      gameButton('ajustes', 96, RANK_ON ? 196 : 144, 150, 42, '⚙  AJUSTES', 'ghost');
       { const pend = (missoes ? missoes.lista : []).filter(m => !m.feito).length; if (pend) { const bx = 96 + 66, by = (RANK_ON ? 144 : 92) - 18; ctx.fillStyle = '#ff5a4f'; ctx.beginPath(); ctx.arc(bx, by, 10, 0, TAU); ctx.fill(); ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(pend, bx, by + 1); } }
       // garrafas = poderes
       ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = 'rgba(234,245,233,.75)';
@@ -4106,12 +3947,14 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (state === 'shop') drawShop(mt);
     if (state === 'rank') drawRank(mt);
     if (state === 'goals') drawGoals(mt);
+    if (state === 'ajustes') drawAjustes(mt);
 
     if (state === 'paused') {
       ctx.fillStyle = 'rgba(2,10,7,.6)'; ctx.fillRect(0, -menuOY, W, H);
       text3d('PAUSADO', W / 2, 130, 60, '#ffffff', '#d8f58a', '#063d27', 6);
       gameButton('resume', W / 2, 186, 230, 54, '▶  CONTINUAR', 'yellow', true);
       gameButton('menu', W / 2, 252, 170, 44, 'MENU', 'ghost');
+      gameButton('ajustes', W / 2, 306, 170, 40, '⚙  AJUSTES', 'ghost');
     }
 
     if (state === 'over') {
@@ -4182,9 +4025,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (loja.rastro) { ctx.save(); ctx.translate(pv - 62, 240); ctx.scale(1.4, 1.4); drawTrailIcon(loja.rastro, 0, 0, true); ctx.restore(); }
     if (SKp.fx === 'galaxia') for (let i = 0; i < 5; i++) { const an = t * 1.6 + i * TAU / 5; star(pv + Math.cos(an) * 60, 220 + Math.sin(an) * 26, 3, '#ffffff'); }
     if (SKp.fx === 'arcoiris' && 'filter' in ctx) ctx.filter = `hue-rotate(${(t * 140) % 360}deg) saturate(1.3)`;
-    if (bmxOn()) {
-      ctx.save(); ctx.translate(pv + 10, 310); drawBmxPose(0, .62, skinKey(), { spin: t * 4 }); ctx.restore();
-    } else if (scooterOn()) {
+    if (scooterOn()) {
       const z = .62, fr = Math.floor(t * 1.2) % 2;
       ctx.save(); ctx.translate(pv, 310); drawScooterPose(fr, z, skinKey()); ctx.restore();
     } else if (skateOn()) {
@@ -4458,6 +4299,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     else if (b.id === 'rkall' || b.id === 'rkweek') { rankTab = b.id === 'rkall' ? 'top' : 'semana'; rankLoad(); }
     else if (b.id === 'back') state = 'ready';
     else if (b.id === 'goals') state = 'goals';
+    else if (b.id === 'ajustes') { ajVolta = state; state = 'ajustes'; }
+    else if (b.id === 'ajback') state = ajVolta;
+    else if (b.id.startsWith('aj:')) ajusteTap(b.id.slice(3));
     else if (b.id === 'cont') continuar();
     else if (b.id === 'share') compartilhar();
     else if (b.id.includes(':')) { const [kind, id] = b.id.split(':'); shopTap(kind, id); }
@@ -4511,19 +4355,38 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (perfSum / perfN > 22) { renderScale = Math.max(1, renderScale - .25); fit(); }
     perfN = 0; perfSum = 0;
   }
+  // ?fps no endereço: mostra no canto o desempenho (para testar no celular): quadros por segundo, ms de trabalho por quadro,
+  // pior quadro dos últimos 2 s e a resolução em uso
+  const SHOW_FPS = /[?&]fps\b/.test(location.search);
+  const fpsInfo = { fps: 0, work: 0, worst: 0, n: 0, acc: 0, wacc: 0, wmax: 0, t0: 0 };
+  function drawFps() {
+    if (!SHOW_FPS) return;
+    ctx.save(); ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(4, 50, 330, 24);
+    ctx.font = '600 14px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = fpsInfo.worst > 33 ? '#ff8a7a' : fpsInfo.fps < 50 ? '#ffd23a' : '#9bcb45';
+    ctx.fillText(`${fpsInfo.fps} qps · ${fpsInfo.work.toFixed(1)} ms · pior ${fpsInfo.worst.toFixed(0)} ms · ${renderScale}×`, 10, 62);
+    ctx.restore();
+  }
   function frame(now) {
     requestAnimationFrame(frame);
+    if (SHOW_FPS) {
+      fpsInfo.n++; if (!fpsInfo.t0) fpsInfo.t0 = now;
+      if (now - fpsInfo.t0 >= 2000) { fpsInfo.fps = Math.round(fpsInfo.n * 1000 / (now - fpsInfo.t0)); fpsInfo.work = fpsInfo.wacc / fpsInfo.n; fpsInfo.worst = fpsInfo.wmax; fpsInfo.n = 0; fpsInfo.wacc = 0; fpsInfo.wmax = 0; fpsInfo.t0 = now; }
+    }
+    const wt0 = SHOW_FPS ? performance.now() : 0;
     if (last) watchPerf(now - last);
     const root = document.documentElement;
-    root.classList.toggle('in-menu', state === 'ready' || state === 'over' || state === 'paused' || state === 'shop' || state === 'rank' || state === 'goals');
-    root.classList.toggle('no-pause', state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals');
+    root.classList.toggle('in-menu', state === 'ready' || state === 'over' || state === 'paused' || state === 'shop' || state === 'rank' || state === 'goals' || state === 'ajustes');
+    root.classList.toggle('no-pause', state === 'ready' || state === 'over' || state === 'shop' || state === 'rank' || state === 'goals' || state === 'ajustes');
     const pIcon = state === 'paused' ? '▶' : '❚❚';
     if (pauseBtn.textContent !== pIcon) pauseBtn.textContent = pIcon;
     nightBudget = 1;
     const dt = Math.min((now - (last || now)) / 1000, .033); last = now;
     if (!loadState.ready) { drawLoading(); return; }
-    if (state !== 'paused') update(dt);
+    if (state !== 'paused' && !(state === 'ajustes' && ajVolta === 'paused')) update(dt);   // ajustes aberto da pausa: o jogo continua parado
     draw();
+    if (SHOW_FPS) { const w = performance.now() - wt0; fpsInfo.wacc += w; fpsInfo.wmax = Math.max(fpsInfo.wmax, w); drawFps(); }
   }
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
@@ -4546,10 +4409,15 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         () => bgSoft(FX['estrela-cadente'], SKY_MUTE), () => bgSoft(FX['passaro-1'], SKY_MUTE), () => bgSoft(FX['passaro-2'], SKY_MUTE),
         () => ok(SCENE.morros) && bgSoft(SCENE.morros, 'blur(1.6px) saturate(.68)'), () => ok(SCENE.colinas) && bgSoft(SCENE.colinas, BG_MUTE),
         () => sc('fabrica') && bgSoft(sc('fabrica'), 'blur(.9px) saturate(.72)'), () => sc('outdoor') && bgSoft(sc('outdoor'), 'saturate(.82)'),
-        () => bgSoft(TRECHO.canavial, BG_MUTE), () => bgSoft(TRECHO.cidade, BG_MUTE), () => bgSoft(TRECHO.fabrica, FAB_MUTE),
-        () => blurred(FG_IMG, 1.4), () => blurred(FG_FAB_IMG, 1.4), () => blurred(FABRICA_NIGHT, .8),
+        () => blurred(FG_IMG, 1.4), () => blurred(FABRICA_NIGHT, .8),
         ...own.map(n => () => sc(n) && blurred(sc(n), 1.4)));
       if (!tintJobs.running) warmTints();
+      // agora baixa as imagens dos trechos seguintes; cada uma, ao chegar, é decodificada e preparada (cópia suavizada) no menu/carregando
+      TARDE.forEach(([im, src, prep]) => {
+        im.addEventListener('load', () => { (im.decode ? im.decode() : Promise.resolve()).catch(() => {}).then(() => { warmCtx.drawImage(im, 0, 0, 1, 1);
+          if (prep) { const j = () => prep(im); j.tarde = true; tintJobs.unshift(j); if (!tintJobs.running) warmTints(); } }); }, { once: true });
+        im.src = src;
+      });
       ACCS.forEach(A => { if (A.folhas) ACC_NOMES.forEach(n => accImg(n, A.id)); });   // os outros acessórios baixam depois, sem pressa
     };
     Promise.all(lista.map(im => new Promise(res => {
@@ -4597,7 +4465,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (!job) { tintJobs.running = false; return; }
     tintJobs.running = true;
     // durante a corrida não prepara nada (cada folha leva 40–70 ms e dava um tranco); faz no carregamento, no menu e na loja
-    if (!loadState.ready || state === 'running' || state === 'dying') { setTimeout(warmTints, loadState.ready ? 400 : 150); return; }   // espera as imagens chegarem
+    // a preparação dos trechos seguintes (j.tarde) pode rodar na corrida: é feita ainda no campo, bem antes do trecho aparecer
+    if (!loadState.ready || (state === 'running' || state === 'dying') && !job.tarde) { setTimeout(warmTints, loadState.ready ? 400 : 150); return; }   // espera as imagens chegarem
     tintJobs.shift();
     if (typeof job === 'function') { try { job(); } catch (e) {} }
     else if (ok(job[0])) tinted(job[0], job[1]);

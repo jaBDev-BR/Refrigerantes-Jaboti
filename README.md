@@ -165,6 +165,18 @@ flowchart LR
 <kbd>Espaço</kbd> pular (no ar = manobra) &nbsp;·&nbsp; <kbd>↓</kbd> deslizar &nbsp;·&nbsp; 🛹 skate e patinete na loja &nbsp;·&nbsp; 🥤 garrafas Jaboti dão poderes &nbsp;·&nbsp; 🎯 missões do dia &nbsp;·&nbsp; 📱 toque para jogar
 </sub>
 
+<br/><br/>
+
+| 🔥 Dias seguidos | ⭐ Desafio da semana | ⚙️ Ajustes | 📲 Instale e jogue offline |
+|:---:|:---:|:---:|:---:|
+| prêmio crescente em tampinhas por voltar todo dia | um objetivo maior que vale até 300 tampinhas | modo fácil, volumes, vibração e botões para canhotos | no celular: *Adicionar à tela inicial* |
+
+<br/>
+
+<a href="https://github.com/jaBDev-BR/Refrigerantes-Jaboti/actions/workflows/conferencia.yml">
+  <img src="https://github.com/jaBDev-BR/Refrigerantes-Jaboti/actions/workflows/conferencia.yml/badge.svg" alt="Conferência automática do jogo (prints, botões, erros e desempenho) a cada atualização"/>
+</a>
+
 </div>
 
 ---
