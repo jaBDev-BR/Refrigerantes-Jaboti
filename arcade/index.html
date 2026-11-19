@@ -1016,8 +1016,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // ================================================================
   function update(dt) {
     const realDt = dt;
-    { const top = GROUND - player.y - 140, want = (state === 'running' || state === 'dying') ? clamp(16 - top, 0, 90) : 0;   // topo do mascote (com veículo) a 16 px da borda
-      camY += (want - camY) * (1 - Math.exp(-realDt * 7)); }
+    { const icones = state === 'running' && POWER_ORDER.some(k => skills[k] > 0);   // com poder ativo: espaço para os ícones em cima da cabeça
+      const top = GROUND - player.y - 140, iconTop = GROUND - player.y - 150 - 20 - 28;   // topo da barrinha de tempo   // topo do mascote / da fileira de ícones
+      const want = state === 'running' || state === 'dying' ? (icones ? clamp(56 - iconTop, 0, 300) : clamp(16 - top, 0, 90)) : 0;   // barrinhas abaixo do contador de tampinhas (y 56)
+      camY += (want - camY) * (1 - Math.exp(-realDt * (icones && want > camY ? 16 : 7))); }   // com ícones a câmera desce mais rápido (não deixa a fileira bater no painel)
     if (state === 'running' && skills.lento > 0) dt *= .55;   // câmera lenta da Uva
     if (state === 'running') { dt *= tutUpdate(realDt); acompanhar(); }   // tutorial: câmera lenta até o jogador fazer o movimento
     t += dt;
@@ -1704,8 +1706,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // o patinete é desenhado pelo código em 3D (drawScooter). deck = [x, y do topo da base, ângulo] e bar = guidão (entre as mãos), na célula
   const SCOOT_IMG = new Image(); SCOOT_IMG.src = 'assets/mascote-patinete.webp';
   const SC = { size: 400, cx: 200, bot: 353, bar: [75, 93],
-    poses: [{ deck: [184, 322, 0], bar: [259, 236] }, { deck: [189, 322, 0], bar: [264, 228] },   // deck.x = guidão − 75: haste reta
-      { deck: null, bar: [273, 232] }, { deck: null, bar: [265, 232] }, { deck: [204, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
+    // bar = centro do punho da FRENTE (a haste termina dentro dele); grip = [punho de trás, punho da frente]: a barra com as
+    // manoplas vai de um ao outro (2026-11-19: antes a haste passava ao lado do punho e a mão parecia fora do guidão)
+    poses: [{ deck: [184, 322, 0], bar: [273, 237], grip: [[232, 243], [273, 237]] }, { deck: [189, 322, 0], bar: [279, 226], grip: [[243, 235], [279, 226]] },
+      { deck: null, bar: [290, 228], grip: [[259, 243], [290, 228]] }, { deck: null, bar: [277, 226], grip: [[220, 236], [277, 226]] },
+      { deck: [204, 322, 0], bar: null }] };   // no-hander: mãos soltas, guidão na altura normal
   const scooterOn = () => loja.loc === 'patinete' && ok(SCOOT_IMG);
   // BMX: só o mascote nas poses (Gemini 12-v3); a bicicleta é desenhada em 3D pelo código (drawBmx3D), sempre igual.
   // células de 400 px (fruta 112 px, centro em 200,150): 0 em pé nos pedais, 1 agachado, 2 bunny hop, 3 superman, 4 no-hander, 5 tailwhip.
@@ -2224,7 +2229,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // ---------------- patinete desenhado em 3D ----------------
   // coordenadas do patinete: x para frente, y para cima, z para perto da câmera (px da célula de 400, origem no topo da base)
   const SCG = { half: 62, th: 9, w: 15, rear: -73, front: 86, ay: -12, r: 19, hx: 80, hy: 42, pitch: .3 };
-  function drawScooter(k, deck, bar, yaw = 0, spin = 0) {
+  function drawScooter(k, deck, bar, yaw = 0, spin = 0, grip = null) {
     const [dcx, dcy, ang] = deck, ca = Math.cos(ang || 0), sa = Math.sin(ang || 0), cp = Math.cos(SCG.pitch), sp = Math.sin(SCG.pitch);
     const cyw = Math.cos(yaw), syw = Math.sin(yaw);
     const P = (x, y, z, rot) => {                                            // rot: parte que gira no tailwhip (base, pescoço, roda de trás)
@@ -2261,7 +2266,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const tb = [bl[0] - ux * 123.5 * HS, bl[1] - uy * 123.5 * HS];                // ponta de baixo do guidão em T
       const rows = clamp(11 + (len - cTop + 4) / HS, 22, 134);
       piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, 1, [0, 22, 152, rows - 22]);                      // tubo do T
-      piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, .42, [0, 0, 152, 22]);                               // barra com manoplas (de lado)
+      if (grip) {                                                             // barra com manoplas de um punho ao outro (mãos segurando)
+        const L = q => { const dx = q[0] - dcx, dy = q[1] - dcy; return [dx * ca + dy * sa, -(-dx * sa + dy * ca) / cp]; };
+        const g0 = L(grip[0]), g1 = L(grip[1]), gx = g1[0] - g0[0], gy = g1[1] - g0[1], gl = Math.hypot(gx, gy) || 1, ex = 7 / gl;
+        const a0 = [g0[0] - gx * ex, g0[1] - gy * ex], a1 = [g1[0] + gx * ex, g1[1] + gy * ex], sl = gl * (1 + 2 * ex) / 152;
+        piece(scootImg('patinete-guidao'), PN, [0, 11], [152, 11], a0, a1, Math.min(4, .5 / sl), [0, 0, 152, 22]);
+      } else piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, .42, [0, 0, 152, 22]);   // barra com manoplas (de lado)
       wheel3(SCG.front, false);
       piece(scootImg('patinete-haste'), PN, [16, 159], [16, 91], ax, at(cTop), .75);                                                    // garfo + abraçadeira
       piece(scootImg('patinete-base'), PR, [13, 59], [14, 59], [SCG.rear, SCG.ay], [SCG.rear + .829, SCG.ay]);                          // base com pescoço e para-lama
@@ -2305,8 +2315,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     const P0 = SC.poses[f] || SC.poses[0];
     let bar = P0.bar, deck = P0.deck || [P0.bar[0] - SC.bar[0], P0.bar[1] + SC.bar[1], 0];
     const shoeTop = deck[1] - 18, legs = shoeTop - SC_HIP, drop = crouch * legs * .8;   // canelas ficam com 20% da altura
-    if (drop && bar) bar = [bar[0], bar[1] + drop];
-    drawScooter(k, deck, bar, yaw, (dist || t * 300) / (SCG.r * k));
+    let grip = P0.grip || null;
+    if (drop && bar) { bar = [bar[0], bar[1] + drop]; if (grip) grip = grip.map(q => [q[0], q[1] + drop]); }
+    drawScooter(k, deck, bar, yaw, (dist || t * 300) / (SCG.r * k), grip);
     if (!ok(SCOOT_IMG)) return;
     const S2 = SC.size * k, im = tinted(accImg('patinete') || SCOOT_IMG, tintKey), sx = f * SC.size, X0 = -SC.cx * k, Y0 = -SC.bot * k;
     accOverlay('patinete', f, X0, Y0 + drop * k, k, true);
@@ -2532,16 +2543,16 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     dark = smooth(.44, .56, cyc) * (1 - smooth(.76, .88, cyc));
     dusk = Math.max(0, 1 - Math.abs(cyc - .44) / .1);
     const [top, bot] = skyColors();
-    const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+    const g = ctx.createLinearGradient(0, 0, 0, GROUND + camY);              // até o horizonte com a câmera (nos pulos altos ele desce)
     g.addColorStop(0, top); g.addColorStop(1, bot);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND + camY);
 
     // estrelas: pontinhos cintilando e as maiores com brilho em cruz
     if (dark > .05) {
       ctx.fillStyle = '#fff';
       stars.forEach(s => {
         const tw = .45 + .55 * Math.sin(t * s.sp + s.ph);
-        ctx.globalAlpha = dark * tw;
+        ctx.globalAlpha = dark * tw * .6;                                      // mais apagadas (céu suave)
         if (s.r < 2) { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill(); return; }
         const L = s.r * (2.2 + tw * 1.6);
         ctx.beginPath(); ctx.arc(s.x, s.y, s.r * .7, 0, TAU); ctx.fill();
@@ -2552,8 +2563,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (shooting) {
         shooting.life += 1 / 60;
         const k = shooting.life / .9, hx = shooting.x - k * 260, hy = shooting.y + k * 110;
-        ctx.globalAlpha = dark * Math.sin(Math.min(1, k) * Math.PI);
-        if (ok(FX['estrela-cadente'])) ctx.drawImage(FX['estrela-cadente'], hx - 22.5, hy - 27.5, 80, 48);   // estrela 3D com a cauda para trás
+        ctx.globalAlpha = dark * Math.sin(Math.min(1, k) * Math.PI) * .8;
+        if (ok(FX['estrela-cadente'])) ctx.drawImage(bgSoft(FX['estrela-cadente'], SKY_MUTE), hx - 22.5, hy - 27.5, 80, 48);   // estrela 3D com a cauda para trás
         else { const g = ctx.createLinearGradient(hx, hy, hx + 70, hy - 30); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)');
           ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 70, hy - 30); ctx.stroke(); }
         if (k >= 1) shooting = null;
@@ -2566,11 +2577,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const u = cyc / .52;
       const sx = W * .81 - u * 260, sy = 64 + smooth(.45, 1, u) * (GROUND - 60);
       const sg = ctx.createRadialGradient(sx, sy, 10, sx, sy, 95);
-      sg.addColorStop(0, `rgba(255,240,170,${.55 + dusk * .3})`); sg.addColorStop(1, 'rgba(255,240,170,0)');
+      sg.addColorStop(0, `rgba(255,240,170,${.38 + dusk * .25})`); sg.addColorStop(1, 'rgba(255,240,170,0)');
       ctx.fillStyle = sg; ctx.fillRect(sx - 95, sy - 95, 190, 190);
       if (ok(SUN_IMG)) {
-        ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.sin(t * .8) * .12);
-        ctx.drawImage(SUN_IMG, -43, -43, 86, 86); ctx.restore();
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.sin(t * .8) * .12); ctx.globalAlpha = .82;
+        ctx.drawImage(bgSoft(SUN_IMG, SKY_MUTE), -43, -43, 86, 86); ctx.restore();
         if (dusk > .05) { ctx.globalAlpha = dusk * .35; ctx.fillStyle = '#ff7a2a'; ctx.beginPath(); ctx.arc(sx, sy, 28, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
       } else { ctx.fillStyle = mix('fff6c2', 'ffb04a', dusk); ctx.beginPath(); ctx.arc(sx, sy, 30, 0, TAU); ctx.fill(); }
     }
@@ -2579,19 +2590,19 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const v = (cyc - .48) / .44;
       const mx = W * .9 - v * 600, my = GROUND - 70 - Math.sin(v * Math.PI) * (GROUND - 130) + Math.sin(t * 1.4) * 3;
       const mg = ctx.createRadialGradient(mx, my, 6, mx, my, 80);
-      mg.addColorStop(0, 'rgba(220,230,255,.4)'); mg.addColorStop(1, 'rgba(220,230,255,0)');
+      mg.addColorStop(0, 'rgba(220,230,255,.28)'); mg.addColorStop(1, 'rgba(220,230,255,0)');
       ctx.fillStyle = mg; ctx.fillRect(mx - 80, my - 80, 160, 160);
-      if (ok(MOON_IMG)) ctx.drawImage(MOON_IMG, mx - 32, my - 37, 64, 75);
+      if (ok(MOON_IMG)) { ctx.globalAlpha = .85; ctx.drawImage(bgSoft(MOON_IMG, SKY_MUTE), mx - 32, my - 37, 64, 75); ctx.globalAlpha = 1; }
       else { ctx.fillStyle = '#f3f1e4'; ctx.beginPath(); ctx.arc(mx, my, 20, 0, TAU); ctx.fill(); }
     }
 
     // nuvens (9 desenhos do Gemini numa tira); à noite ficam azuladas
-    const CI = ok(CLOUDS_IMG) && (nightFilter(.5), N(CLOUDS_IMG));
+    const CI = ok(CLOUDS_IMG) && (nightFilter(.5), N(bgSoft(CLOUDS_IMG, SKY_MUTE)));
     clouds.forEach(c => {
       const s = c.s, x = c.x, y = c.y;
       if (CI) {
         const [cx0, cy0, cw, ch] = CLOUD_CELLS[c.k || 0], w = cw * .5 * s, h = ch * .5 * s;
-        ctx.globalAlpha = (.5 + (c.d || .5) * .5) * (1 - dark * .45);   // as de longe mais transparentes
+        ctx.globalAlpha = (.42 + (c.d || .5) * .4) * (1 - dark * .45);  // as de longe mais transparentes (céu suave)
         ctx.drawImage(CI, cx0, cy0, cw, ch, x, y - h * .6, w, h);
         ctx.globalAlpha = 1;
         return;
@@ -2831,6 +2842,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     return c;
   }
   // fundo bem desfocado e desbotado (2026-11-18, opção C+D escolhida pelo usuário): o fundo vira "clima", os obstáculos ficam nítidos na frente
+  // céu (sol, lua, nuvens, pássaros, estrela cadente) mais suave que a pista: dá profundidade e não atrapalha a leitura (2026-11-19)
+  const SKY_MUTE = 'blur(.6px) saturate(.5) contrast(.75) brightness(1.08)';
   const BG_MUTE = 'blur(3.5px) saturate(.4) brightness(1.1) contrast(.7)', FAB_MUTE = 'blur(3.5px) saturate(.4) brightness(.84) contrast(.72)';
   function strip(im, factor, y, h, mirror = true, offset = 0) {
     const w = im.naturalWidth * h / im.naturalHeight, o = dist * factor + offset, src = N(im);
@@ -3630,9 +3643,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // passarinho 3D (2 poses: asas para cima/para baixo, trocando com b.ph); de longe menor e mais transparente
   function drawBird(b) {
-    const im = FX[Math.sin(b.ph) > 0 ? 'passaro-1' : 'passaro-2']; if (!ok(im)) return false;
+    const im0 = FX[Math.sin(b.ph) > 0 ? 'passaro-1' : 'passaro-2']; if (!ok(im0)) return false; const im = bgSoft(im0, SKY_MUTE);
     const w = 15 + b.d * 19, h = w * im.naturalHeight / im.naturalWidth;
-    ctx.save(); ctx.globalAlpha *= .6 + b.d * .4; ctx.drawImage(im, b.x - w / 2, b.y - h / 2, w, h); ctx.restore(); return true;
+    ctx.save(); ctx.globalAlpha *= .45 + b.d * .35; ctx.drawImage(im, b.x - w / 2, b.y - h / 2, w, h); ctx.restore(); return true;
   }
   function drawParticles() {
     particles.forEach(p => {
@@ -3834,14 +3847,19 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (!(invuln > 0 && state === 'running' && Math.floor(t * 18) % 2)) drawMascot();
     if (rainbow) ctx.filter = 'none';
     // ícones dos poderes ativos numa fileira acima do mascote (posição medida no desenho real: acompanha pulos e manobras)
+    // fileira SEMPRE acima da cabeça, a uma distância fixa do jogador (não mede o desenho: nas manobras não sobe/desce);
+    // a câmera vertical desce o bastante para caber (update). 2026-11-19: antes ia para o lado nos pulos altos e parecia "descer".
     const ic = live ? POWER_ORDER.filter(k => skills[k] > 0) : [];
-    if (!ic.length) { SHF.ok = false; return; }
-    const F = shieldFit(cy), gap = 38, topo = -camY + 100;                      // topo visível do mundo (abaixo do painel)
-    let y = Math.min(F.top - 22, cy - 100), x0 = F.x - (ic.length - 1) * gap / 2;
-    if (y < topo) { y = Math.max(topo, F.y - 10); x0 = F.x + F.r * .75 + 22; }  // sem espaço em cima (pulo alto): fileira ao lado
+    if (!ic.length) return;
+    const gap = 38, head = player.slide && player.ground ? 96 : wheels() ? 150 : 128;
+    const y = GROUND - player.y - head - 20, x0 = PX + 6 - (ic.length - 1) * gap / 2;
     ic.forEach((k, i) => {
-      if (skills[k] < 2 && Math.floor(t * 10) % 2) return;                     // pisca nos 2 s finais
-      drawPowerIcon(POWER_ICON[k], x0 + i * gap, y, i);
+      const x = x0 + i * gap, frac = clamp(skills[k] / SKILLS[k].dur, 0, 1), bw = 30, by = y - 26;
+      // barrinha de tempo em cima do ícone (30 px, menor que o espaço de 38 entre os ícones: não encosta na do lado)
+      ctx.fillStyle = 'rgba(10,20,30,.6)'; rr(x - bw / 2 - 1.5, by - 1.5, bw + 3, 8, 4); ctx.fill();
+      ctx.fillStyle = SKILLS[k].color; if (frac > 0) { rr(x - bw / 2, by, bw * frac, 5, 2.5); ctx.fill(); }
+      if (skills[k] < 2 && Math.floor(t * 10) % 2) return;                     // ícone pisca nos 2 s finais
+      drawPowerIcon(POWER_ICON[k], x, y, i);
     });
   }
   // poderes ativos no canto (2026-11-18: maior e legível): pílula escura com garrafa, nome, barra e segundos restantes
@@ -3888,7 +3906,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (state !== 'ready') {
       drawCoin({ x: 30, y: 26, ph: 0 });
       ctx.textAlign = 'left'; ctx.fillStyle = ink; ctx.fillText('× ' + caps, 48, 16);
-      drawSkillHud(ink);
+      // (2026-11-19) painel dos poderes no canto saiu: o tempo aparece na barrinha em cima de cada ícone do mascote (drawPlayerFx)
     }
     drawCombo();
     if (state === 'running') { drawPowerBanner(); drawTutorial(); }
