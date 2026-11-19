@@ -580,7 +580,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // profundidade: d = 0 bem longe (pequeno, lento, transparente) até 1 perto (grande, rápido)
   function newCloud(x) {
     const d = Math.random() < .12 ? .95 + Math.random() * .05 : Math.random() * .75;
-    return { x, y: 18 + (1 - d) * 70 + Math.random() * 40, d, s: .4 + d * 1.15, k: Math.floor(Math.random() * 9) };
+    return { x, y: 18 + (1 - d) * 70 + Math.random() * 40, d, s: .4 + d * 1.15, k: Math.floor(Math.random() * 7) };   // 7 = CLOUD_CELLS.length (definido mais abaixo; aqui roda antes)
   }
   function newBird(x) { const d = Math.random(); return { x, y: 40 + (1 - d) * 50 + Math.random() * 60, d, ph: Math.random() * TAU }; }
   function initScenery() {
@@ -2552,9 +2552,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (shooting) {
         shooting.life += 1 / 60;
         const k = shooting.life / .9, hx = shooting.x - k * 260, hy = shooting.y + k * 110;
-        const g = ctx.createLinearGradient(hx, hy, hx + 70, hy - 30); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.globalAlpha = dark * Math.sin(Math.min(1, k) * Math.PI); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 70, hy - 30); ctx.stroke();
+        ctx.globalAlpha = dark * Math.sin(Math.min(1, k) * Math.PI);
+        if (ok(FX['estrela-cadente'])) ctx.drawImage(FX['estrela-cadente'], hx - 22.5, hy - 27.5, 80, 48);   // estrela 3D com a cauda para trás
+        else { const g = ctx.createLinearGradient(hx, hy, hx + 70, hy - 30); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 70, hy - 30); ctx.stroke(); }
         if (k >= 1) shooting = null;
       }
     }
@@ -2569,7 +2570,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.fillStyle = sg; ctx.fillRect(sx - 95, sy - 95, 190, 190);
       if (ok(SUN_IMG)) {
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.sin(t * .8) * .12);
-        ctx.drawImage(SUN_IMG, -40, -40, 80, 80); ctx.restore();
+        ctx.drawImage(SUN_IMG, -43, -43, 86, 86); ctx.restore();
         if (dusk > .05) { ctx.globalAlpha = dusk * .35; ctx.fillStyle = '#ff7a2a'; ctx.beginPath(); ctx.arc(sx, sy, 28, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
       } else { ctx.fillStyle = mix('fff6c2', 'ffb04a', dusk); ctx.beginPath(); ctx.arc(sx, sy, 30, 0, TAU); ctx.fill(); }
     }
@@ -2605,7 +2606,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const SUN_IMG = new Image(); SUN_IMG.src = 'assets/cenario/sol.webp';
   const MOON_IMG = new Image(); MOON_IMG.src = 'assets/cenario/lua.webp';
   const CLOUDS_IMG = new Image(); CLOUDS_IMG.src = 'assets/cenario/nuvens.webp';
-  const CLOUD_CELLS = [[0, 1, 264, 130], [268, 2, 264, 129], [536, 0, 262, 131], [802, 0, 201, 131], [1007, 1, 196, 130], [1207, 40, 113, 91], [1324, 49, 108, 82], [1436, 66, 96, 65], [1536, 66, 93, 65]];
+  // céu 3D (ChatGPT, ferramentas/montar-ceu-3d.py, 2026-11-19): 3 nuvens grandes, 2 médias, pequena e tufinho
+  const CLOUD_CELLS = [[0, 33, 264, 131], [268, 0, 264, 164], [536, 61, 264, 103], [804, 34, 200, 130], [1008, 43, 200, 121], [1212, 90, 113, 74], [1329, 94, 96, 70]];
   let shooting = null;
 
   function ridge(factor, base, amp, f1, f2, color) {
@@ -2906,6 +2908,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (dark < .6) {
       ctx.strokeStyle = D('2b3a3f'); ctx.lineWidth = 2; ctx.lineCap = 'round';
       birds.forEach(b => {
+        if (drawBird(b)) return;
         const f = Math.sin(b.ph) * 6;
         ctx.beginPath(); ctx.moveTo(b.x - 9, b.y - f); ctx.quadraticCurveTo(b.x - 4, b.y - 3, b.x, b.y); ctx.quadraticCurveTo(b.x + 4, b.y - 3, b.x + 9, b.y - f); ctx.stroke();
       });
@@ -2996,6 +2999,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (dark < .6 && bw.fabrica < .5) {
       ctx.strokeStyle = D('2b3a3f'); ctx.lineCap = 'round';
       birds.forEach(b => {
+        if (drawBird(b)) return;
         const k = .5 + b.d * .9, f = Math.sin(b.ph) * 6 * k;                // de longe: pequeno, fino e mais claro
         ctx.globalAlpha = .45 + b.d * .55; ctx.lineWidth = 1.2 + b.d * 1.6;
         ctx.beginPath(); ctx.moveTo(b.x - 9 * k, b.y - f); ctx.quadraticCurveTo(b.x - 4 * k, b.y - 3 * k, b.x, b.y); ctx.quadraticCurveTo(b.x + 4 * k, b.y - 3 * k, b.x + 9 * k, b.y - f); ctx.stroke();
@@ -3616,13 +3620,19 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // efeitos 3D (folha do ChatGPT, ferramentas/montar-efeitos.py): rastros, ícones dos poderes, anel do escudo, asinha, fagulha
   const FX = {};
-  ['nota1', 'nota2', 'estrela', 'brilho', 'chama', 'bolha', 'escudo', 'ima', 'relogio', 'asa', 'raio', 'fagulha'].forEach(n => { const im = new Image(); im.src = `assets/efeitos/${n}.webp`; FX[n] = im; });
+  ['nota1', 'nota2', 'estrela', 'brilho', 'chama', 'bolha', 'escudo', 'ima', 'relogio', 'asa', 'raio', 'fagulha', 'passaro-1', 'passaro-2', 'estrela-cadente'].forEach(n => { const im = new Image(); im.src = `assets/efeitos/${n}.webp`; FX[n] = im; });
   // desenha o efeito n centrado em (x, y) com o lado maior = tam; rot = giro; fx = espelha na horizontal; sy = achata na vertical
   function fx(n, x, y, tam, rot = 0, flip = false, sy = 1) {
     const im = FX[n]; if (!ok(im)) return false;
     const k = tam / Math.max(im.naturalWidth, im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
     ctx.save(); ctx.translate(x, y); if (rot) ctx.rotate(rot); if (flip || sy !== 1) ctx.scale(flip ? -1 : 1, sy);
     ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore(); return true;
+  }
+  // passarinho 3D (2 poses: asas para cima/para baixo, trocando com b.ph); de longe menor e mais transparente
+  function drawBird(b) {
+    const im = FX[Math.sin(b.ph) > 0 ? 'passaro-1' : 'passaro-2']; if (!ok(im)) return false;
+    const w = 15 + b.d * 19, h = w * im.naturalHeight / im.naturalWidth;
+    ctx.save(); ctx.globalAlpha *= .6 + b.d * .4; ctx.drawImage(im, b.x - w / 2, b.y - h / 2, w, h); ctx.restore(); return true;
   }
   function drawParticles() {
     particles.forEach(p => {
@@ -3718,9 +3728,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (x2 < 0) return SHF;
     const cx = (x1 + x2 + 1) / 2, cyy = (y1 + y2 + 1) / 2; let m = 0;
     for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) if (d[(y * w + x) * 4 + 3] > 60) { const dd = (x + .5 - cx) ** 2 + (y + .5 - cyy) ** 2; if (dd > m) m = dd; }
-    const wx = PX - WW / 2 + cx / Q, wy = top + cyy / Q, wr = Math.sqrt(m) / Q + 10;
-    if (!SHF.ok) { SHF.x = wx; SHF.y = wy; SHF.r = Math.max(SH_R, wr); SHF.ok = true; }
-    else { SHF.x = lerp(SHF.x, wx, .6); SHF.y = lerp(SHF.y, wy, .6); SHF.r = wr > SHF.r ? wr : lerp(SHF.r, Math.max(SH_R, wr), .12); }
+    const wx = PX - WW / 2 + cx / Q, wy = top + cyy / Q, wr = Math.sqrt(m) / Q + 10, wt = top + y1 / Q;
+    if (!SHF.ok) { SHF.x = wx; SHF.y = wy; SHF.top = wt; SHF.r = Math.max(SH_R, wr); SHF.ok = true; }
+    else { SHF.x = lerp(SHF.x, wx, .6); SHF.y = lerp(SHF.y, wy, .6); SHF.top = lerp(SHF.top, wt, .6); SHF.r = wr > SHF.r ? wr : lerp(SHF.r, Math.max(SH_R, wr), .12); }
     return SHF;
   }
   let shieldTexC = null;
@@ -3791,30 +3801,23 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       particles.push({ type: 'hexshard', x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .6, max: .6, r: 5 + Math.random() * 4, rot: Math.random() * TAU, vr: (Math.random() - .5) * 14 }); }
     particles.push({ type: 'shockwave', x: cx, y: cy, life: .4, max: .4, r: R });
   }
+  // 2026-11-19 (pedido do usuário): os poderes NÃO têm mais efeito em volta do mascote (escudo, ondas do ímã, anéis do lento,
+  // rastro do turbo, estrelas do x2, faíscas do pulo); só os ícones 3D numa fileira EM CIMA do mascote. A fruta continua
+  // mudando de cor (tinted). Funções antigas do escudo (drawShield/shieldOrbit/shieldTex) ficaram sem uso.
+  const POWER_ICON = { turbo: 'raio', escudo: 'escudo', dobro: 'x2', ima: 'ima', pulo: 'asa', lento: 'relogio' };
+  function drawPowerIcon(n, x, y, i) {
+    const bob = Math.sin(t * 4 + i * 1.7) * 3;
+    if (n === 'x2') {                                                          // estrela dourada com "x2"
+      fx('estrela', x, y + bob, 36, Math.sin(t * 3 + i) * .15);
+      ctx.save(); ctx.font = `15px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      ctx.lineWidth = 4; ctx.strokeStyle = '#8a4a00'; ctx.strokeText('x2', x, y + bob + 2); ctx.fillStyle = '#ffffff'; ctx.fillText('x2', x, y + bob + 2); ctx.restore();
+    } else if (n === 'escudo') { fx('bolha', x, y + bob, 24); fx('escudo', x, y + bob, 32, t * 1.5); }   // bolha com o anel de hexágonos girando
+    else if (n === 'asa') fx('asa', x, y + bob, 32, -.15, true, .8 + Math.sin(t * 14) * .2);              // asinha batendo
+    else fx(n, x, y + bob, 32, n === 'relogio' ? Math.sin(t * 3) * .3 : Math.sin(t * 2 + i) * .1);
+  }
   function drawPlayerFx() {
     const cy = GROUND - player.y - 58, live = state === 'running' || state === 'paused';
-    // brilho pulsando atrás do mascote, na cor do poder
-    const tk = live && activeTint();
-    if (tk) {
-      const a = .32 + Math.sin(t * 6) * .08, g = ctx.createRadialGradient(PX, cy, 8, PX, cy, 74);
-      g.addColorStop(0, `rgba(${POWER_TINT[tk].aura},${a})`); g.addColorStop(1, `rgba(${POWER_TINT[tk].aura},0)`);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(PX, cy, 74, 0, TAU); ctx.fill();
-    }
-    // turbo: rastro dourado de velocidade e fagulhas atrás
-    if (skills.turbo > 0 && state === 'running') {
-      ctx.save(); ctx.strokeStyle = 'rgba(255,214,58,.7)'; ctx.lineCap = 'round';
-      for (let i = 0; i < 5; i++) {
-        const yy = cy - 34 + i * 17 + Math.sin(t * 20 + i) * 3, len = 50 + ((t * 300 + i * 37) % 60);
-        ctx.lineWidth = 3 - Math.abs(i - 2) * .6; ctx.globalAlpha = .55 - Math.abs(i - 2) * .12;
-        ctx.beginPath(); ctx.moveTo(PX - 34, yy); ctx.lineTo(PX - 34 - len, yy); ctx.stroke();
-      }
-      ctx.restore();
-      if (Math.random() < .5) particles.push({ type: 'ember', x: PX - 26, y: cy + (Math.random() - .5) * 60, vx: -160 - Math.random() * 120, vy: (Math.random() - .5) * 40, life: .35, max: .35, r: 3 + Math.random() * 2.5 });
-      ghostPass = true;                            // cópias do rastro: só desenham, sem rastro de manobra nem poeira
-      for (let i = 3; i >= 1; i--) { ctx.save(); ctx.globalAlpha = .1 * (4 - i); ctx.translate(-i * 20, 0); drawMascot(); ctx.restore(); }
-      ghostPass = false;
-    }
-    // cor especial: brilho/efeito em volta e arco-íris trocando de cor
+    // cor especial (loja): brilho/efeito em volta e arco-íris trocando de cor
     const SK2 = curSkin();
     if (SK2.aura && state !== 'over') {
       const a = .26 + Math.sin(t * (SK2.fx === 'lava' ? 9 : 4)) * .08, r = SK2.fx === 'neon' ? 64 + dark * 20 : 60, g = ctx.createRadialGradient(PX, cy, 6, PX, cy, r);
@@ -3825,65 +3828,38 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       const an = t * 1.6 + i * TAU / 5; star(PX + Math.cos(an) * 46, cy + Math.sin(an) * 22 - 6, 2.5 + Math.sin(t * 6 + i) * 1.2, i % 2 ? '#d8c8ff' : '#ffffff');
     }
     if (loja.rastro === 'tr_arco' && live && trailHist.length > 2) drawRainbowTrail();
-    // escudo: metade de trás do anel em órbita (a cúpula e a metade da frente vêm depois do mascote)
-    const shieldOn = skills.escudo > 0 && live && !(skills.escudo < 2 && Math.floor(t * 10) % 2);
-    if (!shieldOn) SHF.ok = false;
-    const SF = shieldOn ? shieldFit(cy) : null;                                // centro e raio que cobrem o mascote desenhado agora
-    if (shieldOn) shieldOrbit(SF, false);
     // pisca durante a invencibilidade
     const rainbow = SK2.fx === 'arcoiris' && 'filter' in ctx;
     if (rainbow) ctx.filter = `hue-rotate(${(t * 140) % 360}deg) saturate(1.3)`;
     if (!(invuln > 0 && state === 'running' && Math.floor(t * 18) % 2)) drawMascot();
     if (rainbow) ctx.filter = 'none';
-    if (state !== 'running' && state !== 'paused') return;
-    // ímã: ondas laranja puxando as tampinhas, com faíscas
-    if (skills.ima > 0) {
-      ctx.save(); ctx.strokeStyle = '#ff7a14'; ctx.lineCap = 'round';
-      for (let i = 0; i < 4; i++) { const k = 1 - (t * 1.4 + i / 4) % 1; ctx.lineWidth = 2 + k * 2; ctx.globalAlpha = (1 - k) * .7; ctx.beginPath(); ctx.arc(PX, cy, 38 + k * 90, -1.15, 1.15); ctx.stroke(); }
-      ctx.restore();
-      if (state === 'running' && Math.random() < .25) { const a = (Math.random() - .5) * 2.2, d = 60 + Math.random() * 50; particles.push({ type: 'spark', x: PX + Math.cos(a) * d, y: cy + Math.sin(a) * d, vx: -Math.cos(a) * 160, vy: -Math.sin(a) * 160, life: .35, max: .35, r: 2, color: '#ffb35a' }); }
-    }
-    // câmera lenta: anéis roxos se abrindo devagar e bolinhas flutuando
-    if (skills.lento > 0) {
-      ctx.save(); ctx.strokeStyle = '#be78ff'; ctx.lineWidth = 2;
-      for (let i = 0; i < 2; i++) { const k = (t * .45 + i / 2) % 1; ctx.globalAlpha = (1 - k) * .55; ctx.beginPath(); ctx.arc(PX, cy, 30 + k * 80, 0, TAU); ctx.stroke(); }
-      ctx.fillStyle = '#d9b3ff';
-      for (let i = 0; i < 6; i++) { const a = t * .8 + i * TAU / 6; ctx.globalAlpha = .5 + Math.sin(t * 3 + i) * .25; ctx.beginPath(); ctx.arc(PX + Math.cos(a) * 52, cy + Math.sin(a) * 40, 3, 0, TAU); ctx.fill(); }
-      ctx.restore();
-    }
-    // pontos x2: duas estrelinhas amarelas girando em volta
-    if (skills.dobro > 0) for (let i = 0; i < 2; i++) {
-      const a = t * 4 + i * Math.PI, x = PX + Math.cos(a) * 50, y = cy + Math.sin(a) * 22 - 10;
-      if (!fx('estrela', x, y, 20 + Math.sin(a) * 4, t * 5)) star(x, y, 7, '#fff05a');
-    }
-    // escudo da Cola: cúpula de energia (hexágonos fortes na borda, quase invisíveis no meio), borda brilhante, faixa de luz, anel na frente
-    if (shieldOn) drawShield(SF);
-    // ícones 3D dos poderes flutuando acima da cabeça (ímã, relógio do lento, raio do turbo)
-    { const ic = [skills.ima > 0 && 'ima', skills.lento > 0 && 'relogio', skills.turbo > 0 && 'raio'].filter(Boolean);
-      const top = cy - 118 - (wheels() ? 22 : 0) - (player.slide && player.ground ? -26 : 0);
-      ic.forEach((n, i) => { const x = PX - (ic.length - 1) * 19 + i * 38, bob = Math.sin(t * 4 + i * 1.7) * 4, end = skills[{ ima: 'ima', relogio: 'lento', raio: 'turbo' }[n]] < 2 && Math.floor(t * 10) % 2;
-        if (!end) fx(n, x, top + bob, 34, n === 'relogio' ? Math.sin(t * 3) * .3 : Math.sin(t * 2 + i) * .1); }); }
-    // pulo triplo: asinha batendo atrás dos tênis
-    if (skills.pulo > 0) fx('asa', PX - 30, GROUND - player.y - 30 - (wheels() ? 26 : 0), 50, -.25, true, .75 + Math.sin(t * (player.ground ? 8 : 22)) * .25);
-    // pulo triplo: faíscas verdes nos tênis e anel verde ao sair do chão
-    if (skills.pulo > 0 && state === 'running' && !player.ground && player.vy > 600 && Math.random() < .5) ring(PX, GROUND - player.y, '#96f05a');
-    if (skills.pulo > 0 && state === 'running' && Math.random() < .45) particles.push({ type: 'spark', x: PX + (Math.random() - .5) * 30, y: GROUND - player.y - 4, vx: (Math.random() - .5) * 40, vy: 30, life: .4, max: .4, r: 2, color: '#b8f06a' });
+    // ícones dos poderes ativos numa fileira acima do mascote (posição medida no desenho real: acompanha pulos e manobras)
+    const ic = live ? POWER_ORDER.filter(k => skills[k] > 0) : [];
+    if (!ic.length) { SHF.ok = false; return; }
+    const F = shieldFit(cy), gap = 38, topo = -camY + 100;                      // topo visível do mundo (abaixo do painel)
+    let y = Math.min(F.top - 22, cy - 100), x0 = F.x - (ic.length - 1) * gap / 2;
+    if (y < topo) { y = Math.max(topo, F.y - 10); x0 = F.x + F.r * .75 + 22; }  // sem espaço em cima (pulo alto): fileira ao lado
+    ic.forEach((k, i) => {
+      if (skills[k] < 2 && Math.floor(t * 10) % 2) return;                     // pisca nos 2 s finais
+      drawPowerIcon(POWER_ICON[k], x0 + i * gap, y, i);
+    });
   }
   // poderes ativos no canto (2026-11-18: maior e legível): pílula escura com garrafa, nome, barra e segundos restantes
   function drawSkillHud(ink) {
-    let y = 50;
-    for (const k of SKILL_KEYS) {
+    // 2026-11-19: chips compactos em FILEIRA no alto (ícone 3D do poder, segundos e barra). Antes empilhava para baixo e,
+    // com muitos poderes, ficava em cima do mascote. 6 chips cabem antes dos botões de pausa/som do meio.
+    let x = 10; const y = 50, w = 78;
+    for (const k of POWER_ORDER) {
       if (!(skills[k] > 0)) continue;
-      const sk = SKILLS[k], frac = clamp(skills[k] / sk.dur, 0, 1), f = flavorByName(sk.flavors[0]);
-      ctx.fillStyle = 'rgba(10,20,30,.55)'; rr(10, y - 4, 178, 40, 20); ctx.fill();
+      const sk = SKILLS[k], frac = clamp(skills[k] / sk.dur, 0, 1);
+      ctx.fillStyle = 'rgba(10,20,30,.55)'; rr(x, y - 2, w, 34, 17); ctx.fill();
       ctx.strokeStyle = sk.color; ctx.lineWidth = 2; ctx.stroke();
-      if (!drawBottleArt(f, true, 30, y + 33, 34)) ctx.drawImage(bottleSprite(f, 24, 58), 22, y - 1, 14, 34);
-      ctx.font = `19px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
-      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(sk.short, 48, y + 16); ctx.fillStyle = '#ffffff'; ctx.fillText(sk.short, 48, y + 16);
-      ctx.font = `15px ${UI}`; ctx.textAlign = 'right'; ctx.fillStyle = sk.color; ctx.fillText(Math.ceil(skills[k]) + 's', 178, y + 16);
-      ctx.fillStyle = 'rgba(255,255,255,.22)'; rr(48, y + 22, 130, 8, 4); ctx.fill();
-      ctx.fillStyle = sk.color; rr(48, y + 22, 130 * frac, 8, 4); ctx.fill();
-      y += 46;
+      drawPowerIcon(POWER_ICON[k], x + 17, y + 15, 0);
+      ctx.font = `16px ${UI}`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(Math.ceil(skills[k]) + 's', x + w - 9, y + 15); ctx.fillStyle = '#ffffff'; ctx.fillText(Math.ceil(skills[k]) + 's', x + w - 9, y + 15);
+      ctx.fillStyle = 'rgba(255,255,255,.22)'; rr(x + 36, y + 21, w - 45, 6, 3); ctx.fill();
+      ctx.fillStyle = sk.color; rr(x + 36, y + 21, (w - 45) * frac, 6, 3); ctx.fill();
+      x += w + 5;
     }
   }
   // aviso grande no meio da tela quando pega um poder: nome + o que ele faz
