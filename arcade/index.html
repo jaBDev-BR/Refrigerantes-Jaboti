@@ -1034,10 +1034,12 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (player.blink < -.12) player.blink = 1.8 + Math.random() * 2.6;
 
     // cenário sempre vivo
-    const scroll = state === 'running' ? speed : 0;
-    clouds.forEach((c, i) => { c.x -= (scroll * (.015 + c.d * .09) + 5 + c.d * 10) * dt; if (c.x < -260) clouds[i] = newCloud(W + 40 + Math.random() * 220); });
+    // parallax (2026-11-19): cada camada mais longe anda mais devagar, sempre na ordem nuvens < morros < fábrica ao longe < colinas
+    // < trechos < outdoors < mureta = pista; usa vel (com o turbo) igual à pista
+    const scroll = state === 'running' ? (vel || speed) : 0;
+    clouds.forEach((c, i) => { c.x -= (scroll * (.01 + c.d * .025) + 5 + c.d * 8) * dt; if (c.x < -260) clouds[i] = newCloud(W + 40 + Math.random() * 220); });
     clouds.sort((a, b) => a.d - b.d);                                   // as de perto por cima
-    birds.forEach((b, i) => { b.x -= (scroll * (.08 + b.d * .3) + 22 + b.d * 30) * dt; b.ph += dt * (6 + b.d * 5); if (b.x < -40) birds[i] = newBird(W + 40 + Math.random() * 700); });
+    birds.forEach((b, i) => { b.x -= (scroll * (.06 + b.d * .12) + 22 + b.d * 30) * dt; b.ph += dt * (6 + b.d * 5); if (b.x < -40) birds[i] = newBird(W + 40 + Math.random() * 700); });
     flies.forEach(f => { f.x -= scroll * .5 * dt; f.ph += dt; if (f.x < -10) f.x += W + 20; });
 
     if (state === 'running') {
@@ -2229,7 +2231,9 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // ---------------- patinete desenhado em 3D ----------------
   // coordenadas do patinete: x para frente, y para cima, z para perto da câmera (px da célula de 400, origem no topo da base)
   const SCG = { half: 62, th: 9, w: 15, rear: -73, front: 86, ay: -12, r: 19, hx: 80, hy: 42, pitch: .3 };
+  let scootBar = null;                                                       // barra do guidão entre os punhos (desenhada depois do mascote)
   function drawScooter(k, deck, bar, yaw = 0, spin = 0, grip = null) {
+    scootBar = null;
     const [dcx, dcy, ang] = deck, ca = Math.cos(ang || 0), sa = Math.sin(ang || 0), cp = Math.cos(SCG.pitch), sp = Math.sin(SCG.pitch);
     const cyw = Math.cos(yaw), syw = Math.sin(yaw);
     const P = (x, y, z, rot) => {                                            // rot: parte que gira no tailwhip (base, pescoço, roda de trás)
@@ -2269,11 +2273,23 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (grip) {                                                             // barra com manoplas de um punho ao outro (mãos segurando)
         const L = q => { const dx = q[0] - dcx, dy = q[1] - dcy; return [dx * ca + dy * sa, -(-dx * sa + dy * ca) / cp]; };
         const g0 = L(grip[0]), g1 = L(grip[1]), gx = g1[0] - g0[0], gy = g1[1] - g0[1], gl = Math.hypot(gx, gy) || 1, ex = 7 / gl;
-        const a0 = [g0[0] - gx * ex, g0[1] - gy * ex], a1 = [g1[0] + gx * ex, g1[1] + gy * ex], sl = gl * (1 + 2 * ex) / 152;
-        piece(scootImg('patinete-guidao'), PN, [0, 11], [152, 11], a0, a1, Math.min(4, .5 / sl), [0, 0, 152, 22]);
+        // guidão em T visto de 3/4: a haste sobe até o MEIO da barra (drawScooterPose manda bar = meio dos punhos) e cada punho
+        // segura uma manopla vermelha. Desenhado DEPOIS do mascote (scootBar); os punhos são redesenhados por cima (gripBar)
+        const s0 = PN(g0[0], g0[1]), s1 = PN(g1[0], g1[1]), vx = s1[0] - s0[0], vy = s1[1] - s0[1], vl = Math.hypot(vx, vy) || 1, ux2 = vx / vl, uy2 = vy / vl;
+        const at2 = (q, d) => [q[0] + ux2 * d * k, q[1] + uy2 * d * k], cor = curScoot().base;
+        scootBar = () => {
+          const ln = (a, b, col, w) => { ctx.lineCap = 'round'; ctx.strokeStyle = col; ctx.lineWidth = w * k; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
+          const up = (q, d) => [q[0], q[1] - d * k];
+          ln(s0, s1, '#3e464e', 7); ln(s0, s1, '#9aa3ab', 5); ln(up(s0, 1.3), up(s1, 1.3), '#eef2f5', 1.6);           // barra cromada
+          [s0, s1].forEach(q => {                                                                                   // manoplas (cor do patinete)
+            const e0 = at2(q, -14), e1 = at2(q, 14);
+            ln(e0, e1, 'rgba(0,0,0,.75)', 11); ln(e0, e1, cor, 8); ln(up(e0, 2), up(e1, 2), 'rgba(255,255,255,.5)', 2);
+          });
+          ctx.lineCap = 'butt';
+        };
       } else piece(scootImg('patinete-guidao'), PN, [75.5, 11], [76, 134.5], bl, tb, .42, [0, 0, 152, 22]);   // barra com manoplas (de lado)
       wheel3(SCG.front, false);
-      piece(scootImg('patinete-haste'), PN, [16, 159], [16, 91], ax, at(cTop), .75);                                                    // garfo + abraçadeira
+      piece(scootImg('patinete-haste'), PN, [16, 159], [16, 91], ax, at(cTop), .75, [0, 84, 30, 80]);   // só abraçadeira + garfo (o tubo é o do T)                                                    // garfo + abraçadeira
       piece(scootImg('patinete-base'), PR, [13, 59], [14, 59], [SCG.rear, SCG.ay], [SCG.rear + .829, SCG.ay]);                          // base com pescoço e para-lama
       ctx.lineCap = 'butt'; return;
     }
@@ -2310,22 +2326,36 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
   // pose f do atlas do patinete com o patinete embaixo (origem do contexto = chão, sob o meio da célula)
   // crouch (0–1): agacha dobrando só as pernas — fruta e braços descem inteiros junto com o guidão (não achata o mascote)
+  // punhos nas folhas do patinete COM acessório (medidos pelos pixels brancos; no chapéu as mãos ficaram mais baixas)
+  const SC_GRIP_ACC = {
+    chapeu: [[[231, 250], [270, 250]], [[243, 241], [276, 235]], [[264, 247], [292, 236]], [[218, 238], [275, 232]]],
+    bone: [[[228, 243], [270, 236]], [[242, 236], [277, 228]], [[260, 241], [285, 231]], [[215, 239], [275, 228]]]
+  };
   const SC_HIP = 270;                                                        // linha logo abaixo da fruta na pose andando (célula)
   function drawScooterPose(f, k, tintKey, yaw = 0, crouch = 0) {
     const P0 = SC.poses[f] || SC.poses[0];
     let bar = P0.bar, deck = P0.deck || [P0.bar[0] - SC.bar[0], P0.bar[1] + SC.bar[1], 0];
     const shoeTop = deck[1] - 18, legs = shoeTop - SC_HIP, drop = crouch * legs * .8;   // canelas ficam com 20% da altura
-    let grip = P0.grip || null;
+    let grip = (accImg('patinete') && (SC_GRIP_ACC[loja.acc] || [])[f]) || P0.grip || null;
+    if (grip) bar = [(grip[0][0] + grip[1][0]) / 2, (grip[0][1] + grip[1][1]) / 2];   // haste no meio do guidão
     if (drop && bar) { bar = [bar[0], bar[1] + drop]; if (grip) grip = grip.map(q => [q[0], q[1] + drop]); }
     drawScooter(k, deck, bar, yaw, (dist || t * 300) / (SCG.r * k), grip);
     if (!ok(SCOOT_IMG)) return;
+    const gripBar = (im, sx, X0, Y0, S2) => {                                 // barra + manoplas por cima do corpo; punhos redesenhados por cima delas
+      if (!scootBar || !grip) return;
+      scootBar(); scootBar = null;
+      ctx.save(); ctx.beginPath();
+      grip.forEach(q => { const x = (q[0] - SC.cx) * k, y = (q[1] - SC.bot) * k; ctx.moveTo(x + 15 * k, y); ctx.arc(x, y, 15 * k, 0, TAU); });
+      ctx.clip(); ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); ctx.restore();
+    };
     const S2 = SC.size * k, im = tinted(accImg('patinete') || SCOOT_IMG, tintKey), sx = f * SC.size, X0 = -SC.cx * k, Y0 = -SC.bot * k;
     accOverlay('patinete', f, X0, Y0 + drop * k, k, true);
-    if (!drop) { ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); accOverlay('patinete', f, X0, Y0, k, false); return; }
+    if (!drop) { ctx.drawImage(im, sx, 0, SC.size, SC.size, X0, Y0, S2, S2); gripBar(im, sx, X0, Y0, S2); accOverlay('patinete', f, X0, Y0, k, false); return; }
     const cut = SC_HIP, bottom = SC.size;
     ctx.drawImage(im, sx, 0, SC.size, cut, X0, Y0 + drop * k, S2, cut * k);                         // corpo descendo inteiro
     ctx.drawImage(im, sx, cut, SC.size, legs, X0, Y0 + (cut + drop) * k, S2, (legs - drop) * k);       // canelas encolhidas
     ctx.drawImage(im, sx, shoeTop, SC.size, bottom - shoeTop, X0, Y0 + shoeTop * k, S2, (bottom - shoeTop) * k);   // tênis no lugar
+    gripBar(im, sx, X0, Y0 + drop * k, S2);
     accOverlay('patinete', f, X0, Y0 + drop * k, k, false);
   }
   function scooterFrame() {
@@ -2539,7 +2569,8 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   }
 
   function drawSky() {
-    cyc = (score / 1800 + CYCLE_OFFSET) % 1;
+    // dia/noite pela distância (contínua): antes era pela pontuação, que pula +10/+25/+30 nas tampinhas e manobras e o sol/lua davam saltos
+    cyc = ((dist || 0) * .025 / 1800 + CYCLE_OFFSET) % 1;
     dark = smooth(.44, .56, cyc) * (1 - smooth(.76, .88, cyc));
     dusk = Math.max(0, 1 - Math.abs(cyc - .44) / .1);
     const [top, bot] = skyColors();
@@ -2995,7 +3026,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       if (bw[n] < .01 || !ok(TRECHO[n])) return;
       // cidade (feita a partir de foto da cidade real): mais alta — igreja e prédio aparecem no horizonte, casas do mesmo tamanho de antes
       const im = bgSoft(TRECHO[n], BG_MUTE);
-      ctx.save(); ctx.globalAlpha = bw[n]; strip(im, .2, GROUND - 306, 280, false);   // as duas faixas novas (foto real) têm o mesmo formato
+      ctx.save(); ctx.globalAlpha = bw[n]; strip(im, .3, GROUND - 306, 280, false);   // as duas faixas novas (foto real) têm o mesmo formato
       haze(GROUND - 200, GROUND - 20, .3);                                   // névoa: o fundo fica "mais longe"
       ctx.restore();
     });
@@ -3003,7 +3034,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (bw.fabrica > .01 && ok(TRECHO.fabrica)) {
       ctx.save(); ctx.globalAlpha = bw.fabrica;
       ctx.fillStyle = '#26282d'; ctx.fillRect(0, 0, W, 8);                 // galpão ocupa a tela toda (teto em arco no alto)
-      nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .2, 2, GROUND - 2, false); nightFilter(.55);
+      nightFilter(.2); strip(bgSoft(TRECHO.fabrica, FAB_MUTE), .38, 2, GROUND - 2, false); nightFilter(.55);
       ctx.fillStyle = 'rgba(46,40,36,.24)'; ctx.fillRect(0, 0, W, GROUND);     // galpão um pouco mais escuro: obstáculos na frente se destacam
       ctx.restore();
     }
@@ -3023,7 +3054,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     nightFilter();
     // outdoors (somem dentro da fábrica)
     ctx.save(); ctx.globalAlpha = 1 - bw.fabrica;
-    const out = sc('outdoor'), bo = dist * .32, btile = 820;
+    const out = sc('outdoor'), bo = dist * .45, btile = 820;
     for (let k = Math.floor(bo / btile) - 1; k <= Math.floor((bo + W) / btile) + 1; k++) {
       const bx = k * btile + 330 + hash(k * 4.4) * 240 - bo, b = ((k % BRANDS.length) + BRANDS.length) % BRANDS.length;
       if (bx > -200 && bx < W + 20 && bw.fabrica < .99) out ? drawBillboardImg(out, bx, b) : drawBillboard(bx, b);
@@ -3038,7 +3069,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
       ctx.fillStyle = g; ctx.fillRect(0, top, W, GROUND - top);
       ctx.fillStyle = D('f7f1e4'); ctx.fillRect(0, top - 6, W, 7);                       // capa da mureta
       ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, top + 1, W, 2);
-      ctx.strokeStyle = 'rgba(120,100,70,.18)'; ctx.lineWidth = 2; const o = (dist * .8) % 140;   // juntas
+      ctx.strokeStyle = 'rgba(120,100,70,.18)'; ctx.lineWidth = 2; const o = dist % 140;   // juntas (mesma velocidade da pista: a mureta encosta na calçada)
       for (let x = -o; x < W; x += 140) { ctx.beginPath(); ctx.moveTo(x, top + 2); ctx.lineTo(x, GROUND); ctx.stroke(); }
     }
     ctx.restore();
@@ -3190,9 +3221,11 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }
   }
 
-  function drawGlows() {
+  // luzes do cenário (outdoors, logo, janelas) logo depois do cenário — antes ficavam por cima do mascote à noite;
+  // vagalumes (vagalumes = true) continuam por cima de tudo
+  function drawGlows(vagalumes) {
     if (dark < .2) return;
-    glows.forEach(gw => {
+    if (!vagalumes) glows.forEach(gw => {
       if (gw[0] === 'board') {
         const [, x, y, w, h, c] = gw;
         [x + 40, x + w - 40].forEach(lx => {
@@ -3220,7 +3253,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
         ctx.fillStyle = `rgba(255,214,110,${dark * .9})`; ctx.fillRect(gw[0], gw[1], gw[2], gw[3]);
       }
     });
-    flies.forEach(f => {
+    if (vagalumes) flies.forEach(f => {
       const a = dark * (.5 + .5 * Math.sin(t * 3 + f.ph * 5));
       const x = f.x + Math.sin(t * .8 + f.ph * 3) * 14, y = f.y + Math.cos(t * 1.1 + f.ph * 2) * 8;
       const g = ctx.createRadialGradient(x, y, 0, x, y, 9);
@@ -4420,6 +4453,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     drawSky();
     ctx.translate(0, camY);                                                  // mundo (cenário, pista, mascote) com a câmera; céu e HUD fixos
     drawScenery();
+    drawGlows(false);
     drawGround();
     coins.forEach(drawCoin);
     // obstáculos bem visíveis (2026-11-18, opção C+D): contorno escuro grosso + o objeto de novo com sombra escura por baixo
@@ -4436,7 +4470,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     ctx.translate(0, -camY);
     if (dark > 0) { ctx.fillStyle = `rgba(14,22,58,${dark * .22})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
     if (skills.lento > 0) { ctx.fillStyle = `rgba(120,60,200,${.12 * Math.min(1, skills.lento)})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
-    ctx.save(); ctx.translate(0, camY); drawGlows(); ctx.restore();
+    ctx.save(); ctx.translate(0, camY); drawGlows(true); ctx.restore();
     drawSpeedLines();
     // vinheta
     const v = ctx.createRadialGradient(W / 2, H / 2, H * .5, W / 2, H / 2, W * .65);
@@ -4468,27 +4502,89 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (pauseBtn.textContent !== pIcon) pauseBtn.textContent = pIcon;
     nightBudget = 1;
     const dt = Math.min((now - (last || now)) / 1000, .033); last = now;
+    if (!loadState.ready) { drawLoading(); return; }
     if (state !== 'paused') update(dt);
     draw();
   }
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)]
+  const PRELOAD = [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, SCOOT_IMG, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)];
+  // folhas do acessório equipado entram na espera (antes carregavam no 1º uso e o mascote aparecia sem o acessório)
+  const ACC_NOMES = ['base', 'desliza', 'mortal', 'poses', 'skate', 'patinete'];
+  if (loja.acc && accImg('base') !== undefined) ACC_NOMES.forEach(n => { accImg(n); const f = ACC_F[loja.acc]; if (f && f[n]) PRELOAD.push(f[n]); });
+  // tela de carregamento: o jogo só desenha depois que as imagens chegam (ou 8 s), senão aparecia primeiro o desenho de
+  // reserva feito no código (cenário/céu antigos) e depois trocava para as imagens 3D
+  const loadState = { done: 0, total: 0, ready: false };
+  {
+    const lista = PRELOAD.filter(im => im && im.src);
+    loadState.total = lista.length;
+    const fim = () => { if (loadState.ready) return; loadState.ready = true; last = 0;
+      // cópias desfocadas/suavizadas do cenário feitas já no menu (antes eram criadas na 1ª vez que o trecho aparecia: tranco de 30–80 ms)
+      const own = FG_CELLS.concat(FG_FAB_CELLS).map(c => c[6]).filter(Boolean);
+      tintJobs.splice(Math.min(tintJobs.length, 7), 0,                     // depois das cores de poder da folha principal
+        () => bgSoft(SUN_IMG, SKY_MUTE), () => bgSoft(MOON_IMG, SKY_MUTE), () => bgSoft(CLOUDS_IMG, SKY_MUTE),
+        () => bgSoft(FX['estrela-cadente'], SKY_MUTE), () => bgSoft(FX['passaro-1'], SKY_MUTE), () => bgSoft(FX['passaro-2'], SKY_MUTE),
+        () => ok(SCENE.morros) && bgSoft(SCENE.morros, 'blur(1.6px) saturate(.68)'), () => ok(SCENE.colinas) && bgSoft(SCENE.colinas, BG_MUTE),
+        () => sc('fabrica') && bgSoft(sc('fabrica'), 'blur(.9px) saturate(.72)'), () => sc('outdoor') && bgSoft(sc('outdoor'), 'saturate(.82)'),
+        () => bgSoft(TRECHO.canavial, BG_MUTE), () => bgSoft(TRECHO.cidade, BG_MUTE), () => bgSoft(TRECHO.fabrica, FAB_MUTE),
+        () => blurred(FG_IMG, 1.4), () => blurred(FG_FAB_IMG, 1.4), () => blurred(FABRICA_NIGHT, .8),
+        ...own.map(n => () => sc(n) && blurred(sc(n), 1.4)));
+      if (!tintJobs.running) warmTints();
+      ACCS.forEach(A => { if (A.folhas) ACC_NOMES.forEach(n => accImg(n, A.id)); });   // os outros acessórios baixam depois, sem pressa
+    };
+    Promise.all(lista.map(im => new Promise(res => {
+      const ok1 = () => { loadState.done++; res(); };
+      if (im.complete) return ok1();
+      im.addEventListener('load', ok1, { once: true }); im.addEventListener('error', ok1, { once: true });
+    }))).then(fim);
+    setTimeout(fim, 8000);
+  }
+  function drawLoading() {
+    ctx.save();
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#5fb4e8'); g.addColorStop(1, '#bfe4f5');
+    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 46px "Lilita One", system-ui, sans-serif'; ctx.lineWidth = 8; ctx.strokeStyle = '#7a0f13'; ctx.lineJoin = 'round';
+    ctx.strokeText('JABOTI RUN', W / 2, H / 2 - 30); ctx.fillStyle = '#ffd23a'; ctx.fillText('JABOTI RUN', W / 2, H / 2 - 30);
+    const bw = 320, bx = W / 2 - bw / 2, by = H / 2 + 20, k = loadState.total ? loadState.done / loadState.total : 0;
+    ctx.fillStyle = 'rgba(20,40,70,.35)'; rr(bx - 4, by - 4, bw + 8, 22, 11); ctx.fill();
+    ctx.fillStyle = '#d7262b'; rr(bx, by, Math.max(14, bw * k), 14, 7); ctx.fill();
+    ctx.font = '700 16px system-ui, sans-serif'; ctx.fillStyle = '#1d3b5a'; ctx.fillText('Carregando… ' + Math.round(k * 100) + '%', W / 2, by + 40);
+    ctx.restore();
+  }
+  PRELOAD
     .forEach(im => (im.decode ? im.decode() : Promise.resolve()).then(() => warmCtx.drawImage(im, 0, 0, 1, 1)).catch(() => {}));
   // prepara as versões coloridas do mascote aos poucos, uma por vez, para a primeira garrafa não travar o jogo
   const tintJobs = [];
-  const warmAcc = () => { const sh = loja.loc === 'skate' ? SKATE_IMG : loja.loc === 'patinete' ? SCOOT_IMG : loja.loc === 'bmx' ? BMX_IMG : accImg('base'); if (sh) Object.keys(POWER_TINT).forEach(k => tintJobs.unshift([sh, k])); };
-  if (skinKey()) [SPRITES, SLIDE_IMG, MORTAL_IMG, POSES_IMG].forEach(im => tintJobs.push([im, skinKey()]));   // cor comprada primeiro
+  // folhas que o jogador REALMENTE usa (com acessório = as folhas do acessório; de veículo = a folha do veículo) vão primeiro.
+  // Antes, com chapéu/boné, as folhas do acessório não eram preparadas e cada garrafa travava o jogo 50–140 ms
+  const PODER_TINTS = Object.keys(POWER_TINT).filter(k => !k.startsWith('skin_'));   // só as cores dos poderes (as da loja são feitas quando escolhidas)
+  const accRaw = n => { accImg(n); const f = ACC_F[loja.acc]; return (f && f[n]) || null; };
+  const warmAcc = () => {
+    const veh = loja.loc === 'skate' ? (accRaw('skate') || SKATE_IMG) : loja.loc === 'patinete' ? (accRaw('patinete') || SCOOT_IMG) : null;
+    const sheets = veh ? [veh] : [accRaw('base') || SPRITES, accRaw('desliza') || SLIDE_IMG, accRaw('mortal') || MORTAL_IMG];
+    const jobs = [];
+    if (skinKey()) [...sheets, accRaw('poses') || POSES_IMG].forEach(im => jobs.push([im, skinKey()]));   // cor comprada primeiro
+    sheets.forEach(im => PODER_TINTS.forEach(k => jobs.push([im, k])));   // folha principal com todas as cores primeiro
+    tintJobs.unshift(...jobs);
+  };
+  if (skinKey()) [SPRITES, SLIDE_IMG, MORTAL_IMG, POSES_IMG].forEach(im => tintJobs.push([im, skinKey()]));
   warmAcc();
-  Object.keys(POWER_TINT).forEach(k => [SPRITES, SLIDE_IMG, MORTAL_IMG].forEach(im => tintJobs.push([im, k])));
+  if (!accRaw('base')) PODER_TINTS.forEach(k => [SPRITES, SLIDE_IMG, MORTAL_IMG].forEach(im => tintJobs.push([im, k])));   // a pé sem acessório de folha
   SKINS.forEach(sk => { if (sk.tint) tintJobs.push([POSES_IMG, 'skin_' + sk.id]); });
   function warmTints() {
     const job = tintJobs[0];
     if (!job) { tintJobs.running = false; return; }
     tintJobs.running = true;
-    if (ok(job[0])) { tinted(job[0], job[1]); tintJobs.shift(); }
-    setTimeout(warmTints, 120);
+    // durante a corrida não prepara nada (cada folha leva 40–70 ms e dava um tranco); faz no carregamento, no menu e na loja
+    if (!loadState.ready || state === 'running' || state === 'dying') { setTimeout(warmTints, loadState.ready ? 400 : 150); return; }   // espera as imagens chegarem
+    tintJobs.shift();
+    if (typeof job === 'function') { try { job(); } catch (e) {} }
+    else if (ok(job[0])) tinted(job[0], job[1]);
+    else if (!job[0].src || job[0].naturalWidth === 0 && job[0].complete) { /* imagem sem arquivo: descarta */ }
+    else tintJobs.push(job);                                                 // ainda baixando: tenta de novo no fim da fila
+    setTimeout(warmTints, 60);
   }
   function warmTintsStart() { warmTints(); }
   warmTints();
