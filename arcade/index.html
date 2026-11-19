@@ -228,7 +228,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // versão das imagens (ferramentas/versao-assets.py grava aqui um resumo do conteúdo de assets/ antes de publicar):
   // cada imagem pedida como assets/... vira assets/...?v=<versão>, então depois de publicar o navegador nunca mistura
   // código novo com imagem antiga guardada (o GitHub Pages manda guardar por 10 min). No app as imagens vêm de dentro do APK.
-  const ASSET_V = 'b0b0b14bf2';
+  const ASSET_V = '6a0b6b165b';
   if (ASSET_V !== 'dev' && /^https?:$/.test(location.protocol) && location.hostname !== 'appassets.androidplatform.net') {
     const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get() { return d.get.call(this); },
@@ -1344,19 +1344,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   const ACCS = [
     { id: '', nome: 'NENHUM', preco: 0 },
     { id: 'bone', nome: 'BONÉ', preco: 150, folhas: true, slide: [101.9, 180] },   // folhas: poses geradas JÁ com o acessório (assets/acessorios/bone/)
-    { id: 'chapeu', nome: 'CHAPÉU', preco: 250, folhas: true, slide: [97.2, 181] },
-    { id: 'coroa', nome: 'COROA', preco: 500 }
+    { id: 'chapeu', nome: 'CHAPÉU', preco: 250, folhas: true, slide: [97.2, 181] }
+    // coroa (500) saiu em 2026-11-19 até ter folhas próprias geradas (peças em ferramentas/assets-sem-uso/)
   ];
   // ACESSÓRIOS 3D (2026-11-19): peças soltas desenhadas por cima da fruta em TODAS as folhas (a pé, mortal, deslize,
   // poses e skate). ACC_ANCH = por folha e célula: [cx, cy, r da fruta, olhos x, y, ângulo, distância]
   // (medido por ferramentas/ancoras-acessorios.py). Peças em r: w = largura; ax/ay = deslocamento; modo de encaixe.
   const ACC_PECAS = {
     bone:     { w: 2.1, ax: -.06, ay: -.47, modo: 'base' },
-    chapeu:   { w: 2.45, ax: 0, ay: -.56, modo: 'base' },
-    coroa:    { w: 1.45, ax: -.04, ay: -.72, modo: 'base' },
-    capa:     { w: 1.75, ax: -.3, ay: -.5, modo: 'costas' }
+    chapeu:   { w: 2.45, ax: 0, ay: -.56, modo: 'base' }
+    // coroa: { w: 1.45, ax: -.04, ay: -.72, modo: 'base' }, capa: { w: 1.75, ax: -.3, ay: -.5, modo: 'costas' } (fora da loja)
   };
-  const ACC_USA = { bone: ['bone'], chapeu: ['chapeu'], coroa: ['capa', 'coroa'] };
+  const ACC_USA = { bone: ['bone'], chapeu: ['chapeu'] };
   // folhas do mascote já com o acessório desenhado (geradas no ChatGPT; ferramentas/montar-acessorio-3d.py) — carregadas só quando usadas
   const ACC_F = {};
   function accImg(nome, id = loja.acc) {
@@ -1402,7 +1401,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // óculos e headset saíram da loja (2026-11-19, o usuário não gostou): quem comprou recebe as tampinhas de volta e o item é desequipado
   // BMX saiu da loja (2026-11-19): mesma coisa, devolve as 600 tampinhas e volta a pé
   // patinete e as cores dele saíram da loja em 2026-11-19 (fica só o skate): mesma devolução
-  { const REMOVIDOS = { oculos: 300, headset: 350, bmx: 600, patinete: 450, pt_azul: 150, pt_jaboti: 200, pt_preto: 250, pt_neon: 300, pt_ouro: 600 }; let mudou = false;
+  { const REMOVIDOS = { oculos: 300, headset: 350, bmx: 600, patinete: 450, pt_azul: 150, pt_jaboti: 200, pt_preto: 250, pt_neon: 300, pt_ouro: 600, coroa: 500 }; let mudou = false;
     Object.entries(REMOVIDOS).forEach(([id, preco]) => { if (loja.tem.includes(id)) { loja.tem = loja.tem.filter(x => x !== id); loja.carteira += preco; mudou = true; } if (loja.acc === id) { loja.acc = ''; mudou = true; } if (loja.loc === id) { loja.loc = 'pe'; mudou = true; } });
     if (mudou) try { localStorage.setItem('jabotiRunLoja', JSON.stringify(loja)); } catch (e) {} }
   if (loja.acc === 'skate') { loja.acc = ''; loja.loc = 'skate'; }          // antes o skate era um "acessório"

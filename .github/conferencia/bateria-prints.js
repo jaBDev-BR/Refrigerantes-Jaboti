@@ -62,7 +62,7 @@ const { chromium } = require(process.argv[2]); const out = process.argv[4]; cons
   await menu('missoes', () => __g.setState('goals'), 700);
   await menu('ajustes', () => __g.setState('ajustes'), 700);
   // passa por todos os acessórios × veículos para pedir todas as imagens que o jogo usa (aviso de imagem sem uso)
-  for (const acc of ['', 'bone', 'chapeu', 'coroa']) for (const loc of ['pe', 'skate']) {
+  for (const acc of ['', 'bone', 'chapeu']) for (const loc of ['pe', 'skate']) {
     await p.evaluate(([a, l]) => { window.__nodie = true; __g.setAcc(a); __g.setLoc(l); __g.start(); __g.setDist(66000); __g.activate('lata', 300, 200); __g.activate('escudo', 300, 200); }, [acc, loc]); await p.waitForTimeout(450);
   }
   await p.waitForTimeout(1500);
