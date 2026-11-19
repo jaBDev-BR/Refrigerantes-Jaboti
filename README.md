@@ -149,20 +149,20 @@ flowchart LR
 
 <div align="center">
 
-<a href="https://nerdgg094.github.io/nerdGG094/arcade/">
-  <img src="images/jaboti-run-v2.webp" alt="Jaboti Run: o mascote da Jaboti correndo pela calçada da fábrica, pegando a lata especial e coletando tampinhas" width="100%"/>
+<a href="https://jabdev-br.github.io/Refrigerantes-Jaboti/arcade/">
+  <img src="images/jaboti-run-v3.webp" alt="Jaboti Run: o mascote 3D da Jaboti andando de skate pela cidade, com escudo, rastro de estrelas, manobras e a lata especial" width="100%"/>
 </a>
 
 <br/><br/>
 
-<a href="https://nerdgg094.github.io/nerdGG094/arcade/">
+<a href="https://jabdev-br.github.io/Refrigerantes-Jaboti/arcade/">
   <img src="https://img.shields.io/badge/%E2%96%B6%20JOGAR%20AGORA-JABOTI%20RUN-D7262B?style=for-the-badge&labelColor=063D27"/>
 </a>
 
 <br/><br/>
 
 <sub>
-<kbd>Espaço</kbd> pular (2× = mortal duplo) &nbsp;·&nbsp; <kbd>↓</kbd> deslizar &nbsp;·&nbsp; 📦 desvie dos engradados &nbsp;·&nbsp; 🥤 garrafas Jaboti dão poderes &nbsp;·&nbsp; 📱 toque para jogar
+<kbd>Espaço</kbd> pular (no ar = manobra) &nbsp;·&nbsp; <kbd>↓</kbd> deslizar &nbsp;·&nbsp; 🛹 skate e patinete na loja &nbsp;·&nbsp; 🥤 garrafas Jaboti dão poderes &nbsp;·&nbsp; 🎯 missões do dia &nbsp;·&nbsp; 📱 toque para jogar
 </sub>
 
 </div>
