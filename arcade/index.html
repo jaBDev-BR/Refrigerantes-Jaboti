@@ -139,6 +139,7 @@ html.app #jump{right:max(26px,env(safe-area-inset-right));bottom:24px;width:96px
 html.app #duck{left:max(26px,env(safe-area-inset-left));bottom:24px;width:80px;height:80px}
 html.app #duck .ic{font-size:1.5rem}
 /* ajuste "botões trocados de lado" (canhoto): pular à esquerda, deslizar à direita */
+html.capa .controls,html.capa .privlink{visibility:hidden}   /* escondidos enquanto aparece a capa de abertura */
 html.app.canhoto #jump{right:auto;left:max(26px,env(safe-area-inset-left))}
 html.app.canhoto #duck{left:auto;right:max(26px,env(safe-area-inset-right))}
 html.app .mini{top:8px;width:38px;height:38px;min-height:0;padding:0;border-radius:50%;font-size:.95rem;
@@ -228,7 +229,7 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
   // versão das imagens (ferramentas/versao-assets.py grava aqui um resumo do conteúdo de assets/ antes de publicar):
   // cada imagem pedida como assets/... vira assets/...?v=<versão>, então depois de publicar o navegador nunca mistura
   // código novo com imagem antiga guardada (o GitHub Pages manda guardar por 10 min). No app as imagens vêm de dentro do APK.
-  const ASSET_V = '6a0b6b165b';
+  const ASSET_V = '6d5b40f5fd';
   if (ASSET_V !== 'dev' && /^https?:$/.test(location.protocol) && location.hostname !== 'appassets.androidplatform.net') {
     const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
     Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get() { return d.get.call(this); },
@@ -258,6 +259,10 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  // capa de abertura (2026-11-27: a mesma arte do destaque da Play Store); pedida antes de tudo para aparecer logo
+  const CAPA = new Image(); CAPA.src = 'assets/capa.webp';
+  const CAPA_FUNDO = new Image(); CAPA_FUNDO.src = 'assets/capa-fundo.webp';   // a mesma ilustração sem os textos: fundo da tela inicial
+  const CAPA_MIN = 1800, CAPA_FADE = 450, capaT0 = performance.now(); let capaFim = 0;   // fica no mínimo 1,8 s e some em 0,45 s
   // resolução de desenho: no app começa em até 1,5× e baixa sozinha se o celular não der conta
   const APP = document.documentElement.classList.contains('app');
   // RANKING ONLINE (Supabase): preencha com a "Project URL" e a chave pública "anon" do projeto
@@ -3720,37 +3725,42 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     menuOY = Math.round((H - 360) / 2); ctx.translate(0, menuOY);         // centraliza na vertical (câmera afastada)
 
     if (state === 'ready') {
-      // escurece uma faixa central para o conteúdo; as laterais (e o mascote) ficam mais claras
-      const ov = ctx.createLinearGradient(0, 0, W, 0);
-      ov.addColorStop(0, 'rgba(3,18,11,.12)'); ov.addColorStop(.26, 'rgba(3,18,11,.62)'); ov.addColorStop(.74, 'rgba(3,18,11,.62)'); ov.addColorStop(1, 'rgba(3,18,11,.12)');
-      ctx.fillStyle = ov; ctx.fillRect(0, -menuOY, W, H);
+      // tela inicial com a arte da capa (2026-11-27): ilustração cobrindo a tela, título e JOGAR à esquerda (onde fica o
+      // título na capa), botões na coluna da esquerda, mascote da arte livre à direita
+      const TX = 385;
+      if (CAPA_FUNDO.complete && CAPA_FUNDO.naturalWidth) {
+        ctx.save(); ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
+        const sc = Math.max(960 / CAPA_FUNDO.naturalWidth, 360 / CAPA_FUNDO.naturalHeight), w = CAPA_FUNDO.naturalWidth * sc, h = CAPA_FUNDO.naturalHeight * sc;
+        ctx.drawImage(CAPA_FUNDO, (960 - w) / 2, (360 - h) / 2, w, h);
+        const v = ctx.createLinearGradient(0, 0, 560, 0); v.addColorStop(0, 'rgba(4,40,25,.45)'); v.addColorStop(1, 'rgba(4,40,25,0)');
+        ctx.fillStyle = v; ctx.fillRect(0, 0, 960, 360);                    // leve sombra à esquerda: título e botões destacam
+        ctx.restore();
+      } else {
+        const ov = ctx.createLinearGradient(0, 0, W, 0);
+        ov.addColorStop(0, 'rgba(3,18,11,.55)'); ov.addColorStop(.6, 'rgba(3,18,11,.35)'); ov.addColorStop(1, 'rgba(3,18,11,.12)');
+        ctx.fillStyle = ov; ctx.fillRect(0, -menuOY, W, H);
+      }
       const logo = IMG['logo-jaboti'], intro = easeOut(mt / .6);
       ctx.globalAlpha = intro;
-      if (ok(logo)) { const lh = 30, lw = logo.naturalWidth * lh / logo.naturalHeight; ctx.drawImage(logo, cx - lw / 2, 20, lw, lh); }
+      if (ok(logo)) { const lh = 34, lw = logo.naturalWidth * lh / logo.naturalHeight; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 8; ctx.drawImage(logo, TX - lw / 2, 26, lw, lh); ctx.restore(); }
       const bob = Math.sin(t * 2.2) * 3;
-      ctx.save(); ctx.translate(cx, 98 + bob - (1 - intro) * 30); ctx.rotate(-.03);
-      text3d('JABOTI', -62, 0, 58, '#ffffff', '#d8f58a', '#063d27', 6);
-      ctx.translate(118, 4); ctx.rotate(-.06);
-      text3d('RUN', 0, 0, 58, '#fff07a', '#ff9f1a', '#8a1c10', 6);
+      ctx.save(); ctx.translate(TX, 116 + bob - (1 - intro) * 30); ctx.rotate(-.03);
+      text3d('JABOTI', -62, 0, 62, '#ffffff', '#d8f58a', '#063d27', 6);
+      ctx.translate(124, 4); ctx.rotate(-.06);
+      text3d('RUN', 0, 0, 62, '#fff07a', '#ff9f1a', '#8a1c10', 6);
       ctx.restore();
-      gameButton('play', cx, 156, 210, 54, '▶  JOGAR', 'yellow', true);
+      gameButton('play', TX, 184, 220, 56, '▶  JOGAR', 'yellow', true);
       gameButton('shop', 96, 40, 150, 42, '🛒  LOJA', 'ghost');
       walletChip(186, 22);
       if (RANK_ON) gameButton('rank', 96, 92, 150, 42, '🏆  RANKING', 'ghost');
       gameButton('goals', 96, RANK_ON ? 144 : 92, 150, 42, '🎯  MISSÕES', 'ghost');
       gameButton('ajustes', 96, RANK_ON ? 196 : 144, 150, 42, '⚙  AJUSTES', 'ghost');
       { const pend = (missoes ? missoes.lista : []).filter(m => !m.feito).length; if (pend) { const bx = 96 + 66, by = (RANK_ON ? 144 : 92) - 18; ctx.fillStyle = '#ff5a4f'; ctx.beginPath(); ctx.arc(bx, by, 10, 0, TAU); ctx.fill(); ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(pend, bx, by + 1); } }
-      // garrafas = poderes
-      ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = 'rgba(234,245,233,.75)';
-      ctx.fillText('BEBA AS GARRAFAS E GANHE PODERES', cx, 210);
-      SKILL_KEYS.forEach((k, i) => {
-        const S = SKILLS[k], bx = cx - 175 + i * 70, f = flavorByName(S.flavors[0]);
-        ctx.fillStyle = 'rgba(255,255,255,.07)'; rr(bx - 30, 218, 60, 78, 12); ctx.fill();
-        drawBottleArt(f, true, bx, 270 + Math.sin(t * 3 + i) * 2, 44);
-        ctx.font = `12px ${UI}`; ctx.fillStyle = S.color; ctx.fillText(S.short, bx, 288);
-      });
-      ctx.font = `13px ${UI}`; ctx.fillStyle = 'rgba(234,245,233,.6)';
-      ctx.fillText(APP ? '▲ PULAR   •   ▼ DESLIZAR   •   TOQUE 2× NO AR = MANOBRA' : '↑ / ESPAÇO PULAR   •   ↓ DESLIZAR   •   2× NO AR = MANOBRA', cx, 322);
+      // dica dos controles numa faixa escura (o fundo da arte é colorido)
+      { const dica = APP ? '▲ PULAR   •   ▼ DESLIZAR   •   TOQUE 2× NO AR = MANOBRA' : '↑ / ESPAÇO PULAR   •   ↓ DESLIZAR   •   2× NO AR = MANOBRA';
+        ctx.font = `13px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const dw = ctx.measureText(dica).width + 28;
+        ctx.fillStyle = 'rgba(4,30,20,.55)'; rr(TX - dw / 2, 230, dw, 26, 13); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillText(dica, TX, 244); }
       if (best) {                                          // recorde no canto
         ctx.fillStyle = 'rgba(0,0,0,.35)'; rr(W - 170, 14, 156, 34, 17); ctx.fill();
         ctx.font = `17px ${UI}`; ctx.textAlign = 'right'; ctx.fillStyle = '#ffd23a';
@@ -4191,15 +4201,18 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     if (pauseBtn.textContent !== pIcon) pauseBtn.textContent = pIcon;
     nightBudget = 1;
     const dt = Math.min((now - (last || now)) / 1000, .033); last = now;
-    if (!loadState.ready) { drawLoading(); return; }
+    // capa de abertura: enquanto carrega (e no mínimo CAPA_MIN), depois some por cima do menu
+    if (!loadState.ready || performance.now() - capaT0 < CAPA_MIN) { root.classList.add('capa'); drawCapa(); return; }
+    if (!capaFim) { capaFim = performance.now(); root.classList.remove('capa'); }
     if (state !== 'paused' && !(state === 'ajustes' && ajVolta === 'paused')) update(dt);   // ajustes aberto da pausa: o jogo continua parado
     draw();
+    { const f = 1 - (performance.now() - capaFim) / CAPA_FADE; if (f > 0) drawCapa(f); }
     if (SHOW_FPS) { const w = performance.now() - wt0; fpsInfo.wacc += w; fpsInfo.wmax = Math.max(fpsInfo.wmax, w); drawFps(); }
   }
   // decodifica todas as imagens já no início (as folhas dos poderes têm 2400×900);
   // sem isso o primeiro uso de cada uma trava o jogo por uma fração de segundo
   const warmCtx = document.createElement('canvas').getContext('2d');
-  const PRELOAD = [...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)];
+  const PRELOAD = [CAPA_FUNDO, ...Object.values(IMG), ...Object.values(SCENE), BOTTLES, SPRITES, LATA_IMG, SLIDE_IMG, MORTAL_IMG, POSES_IMG, GAS_IMG, SUN_IMG, MOON_IMG, CLOUDS_IMG, OUTDOOR_NIGHT, DRONE_IMG, FABRICA_NIGHT, FG_IMG, ...Object.values(ACC_IMG), ...Object.values(TRECHO), SKATE_IMG, SKATE_ICON, SKATE_SHAPE, ...Object.values(FX), PISO_FAB, PISO_CID, PISO_AV, FG_FAB_IMG, ...Object.values(VEI)];
   // folhas do acessório equipado entram na espera (antes carregavam no 1º uso e o mascote aparecia sem o acessório)
   const ACC_NOMES = ['base', 'desliza', 'mortal', 'poses', 'skate'];
   if (loja.acc && accImg('base') !== undefined) ACC_NOMES.forEach(n => { accImg(n); const f = ACC_F[loja.acc]; if (f && f[n]) PRELOAD.push(f[n]); });
@@ -4235,19 +4248,27 @@ else { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = 
     }))).then(fim);
     setTimeout(fim, 8000);
   }
-  function drawLoading() {
-    ctx.save();
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#5fb4e8'); g.addColorStop(1, '#bfe4f5');
-    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '900 46px "Lilita One", system-ui, sans-serif'; ctx.lineWidth = 8; ctx.strokeStyle = '#7a0f13'; ctx.lineJoin = 'round';
-    ctx.strokeText('JABOTI RUN', W / 2, H / 2 - 30); ctx.fillStyle = '#ffd23a'; ctx.fillText('JABOTI RUN', W / 2, H / 2 - 30);
-    const bw = 320, bx = W / 2 - bw / 2, by = H / 2 + 20, k = loadState.total ? loadState.done / loadState.total : 0;
-    ctx.fillStyle = 'rgba(20,40,70,.35)'; rr(bx - 4, by - 4, bw + 8, 22, 11); ctx.fill();
-    ctx.fillStyle = '#d7262b'; rr(bx, by, Math.max(14, bw * k), 14, 7); ctx.fill();
-    ctx.font = '700 16px system-ui, sans-serif'; ctx.fillStyle = '#1d3b5a'; ctx.fillText('Carregando… ' + Math.round(k * 100) + '%', W / 2, by + 40);
+  // capa de abertura: a arte cobre a tela inteira (corta um pouco em cima e embaixo) + barra de carregamento discreta
+  function drawCapa(alfa = 1) {
+    ctx.save(); ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0); ctx.globalAlpha = alfa;
+    if (CAPA.complete && CAPA.naturalWidth) {
+      const sc = Math.max(960 / CAPA.naturalWidth, 360 / CAPA.naturalHeight), w = CAPA.naturalWidth * sc, h = CAPA.naturalHeight * sc;
+      ctx.drawImage(CAPA, (960 - w) / 2, (360 - h) / 2, w, h);
+    } else {                                                               // a capa ainda não chegou: fundo de céu
+      const g = ctx.createLinearGradient(0, 0, 0, 360); g.addColorStop(0, '#5fb4e8'); g.addColorStop(1, '#bfe4f5');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 960, 360);
+    }
+    if (!loadState.ready) {                                                 // barra fina embaixo, só enquanto carrega
+      const k = loadState.total ? loadState.done / loadState.total : 0, bw = 260, bx = 960 - bw - 28, by = 340;
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; rr(bx - 3, by - 3, bw + 6, 12, 6); ctx.fill();
+      ctx.fillStyle = '#ffd23a'; rr(bx, by, Math.max(6, bw * k), 6, 3); ctx.fill();
+      ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillText('Carregando… ' + Math.round(k * 100) + '%', 960 - 27, by - 7);
+      ctx.fillStyle = '#ffffff'; ctx.fillText('Carregando… ' + Math.round(k * 100) + '%', 960 - 28, by - 8);
+    }
     ctx.restore();
   }
+
   PRELOAD
     .forEach(im => (im.decode ? im.decode() : Promise.resolve()).then(() => warmCtx.drawImage(im, 0, 0, 1, 1)).catch(() => {}));
   // prepara as versões coloridas do mascote aos poucos, uma por vez, para a primeira garrafa não travar o jogo
